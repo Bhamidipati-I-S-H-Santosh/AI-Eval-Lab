@@ -51,12 +51,35 @@ def metric(name: str, higher_is_better: bool = True, needs_judge: bool = False):
 
 
 # ---------- helpers ----------
-_ABSTAIN = re.compile(r"\b(i don['’]?t know|i do not know|not (sure|able to find)|no information|"
-                      r"(doesn['’]?t|does not|don['’]?t|do not) (say|mention|cover|specify|contain))\b", re.I)
+# Abstention scoring, validated against hand labels: python -m evalkit.scorer_check
+_DOCS = r"(polic(y|ies)|documents?|handbook|sources?|guidelines|search results|information)"
+_REFUSAL = re.compile("|".join([
+    r"\bi (don'?t|do not) know\b",
+    r"\b(i'?m|i am) not sure\b",
+    r"\b(couldn'?t|could not|can'?t|cannot|unable to|(was|am|'m) not able to|wasn'?t able to)"
+    r" (find|locate|answer|say|tell|determine|confirm)\b",
+    r"\b(don'?t|do not) have (enough|any|the) (information|details)\b",
+    r"\bno (policy|information|mention|guidance|details?)\b",
+    r"\b(isn'?t|is not|aren'?t|are not|not) (covered|mentioned|addressed|specified|stated)\b",
+    rf"\b{_DOCS} (don'?t|do not|doesn'?t|does not) (say|mention|cover|specify|contain|address|include|state)\b",
+    rf"\bnothing in the {_DOCS}\b",
+    rf"\b{_DOCS} (is|are) silent\b",
+    rf"\b{_DOCS} provides? no\b",
+    r"^\W*unknown\b",
+]), re.I)
+_CLAUSE = re.compile(r"(?<=[.!?;:])\s+|,?\s+but\s+|\s+[—–-]\s+")
+_SUBSTANCE = re.compile(r"\[[^\]]+\]|【[^】]+】|\d")    # a citation or a number
 
 
 def abstained(answer: str) -> bool:
-    return bool(_ABSTAIN.search(answer or ""))
+    """True only if the answer gives up: it contains a refusal, and no other
+    clause carries an actual answer (a citation or a number). So "I don't know"
+    counts, but "$75/day [expense_policy.md]; tips aren't specified" doesn't."""
+    text = (answer or "").replace("’", "'").strip()
+    if not _REFUSAL.search(text):
+        return False
+    clauses = [c for c in _CLAUSE.split(text) if c and c.strip()]
+    return not any(_SUBSTANCE.search(c) and not _REFUSAL.search(c) for c in clauses)
 
 
 def numbers_in(text: str) -> list[float]:

@@ -243,3 +243,23 @@ def test_abstention_accepts_curly_apostrophe():
     from evalkit.metrics import abstained
     assert abstained("I don’t know.") and abstained("I don't know.") and abstained("The policy doesn’t say.")
     assert not abstained("You get 25 days of leave.")
+
+
+
+# ---------- scorer validation: abstention scorer vs hand labels ----------
+# Labels live in tests/fixtures/abstention_labels.jsonl. "dev" was used to build
+# the scorer; "heldout" was written before the scorer changed. Report both with
+#   python -m evalkit.scorer_check --errors
+def _split(name):
+    from evalkit.scorer_check import load, score
+    return score([r for r in load() if r["split"] == name])
+
+
+def test_abstention_scorer_dev_labels():
+    s = _split("dev")
+    assert not s["wrong"], "\n".join(f"[{r['label']}] {r['answer'][:90]}" for r in s["wrong"])
+
+
+def test_abstention_scorer_heldout_labels():
+    s = _split("heldout")
+    assert s["n"] >= 15 and s["precision"] >= 0.9 and s["recall"] >= 0.9, s

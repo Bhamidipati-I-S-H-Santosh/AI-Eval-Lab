@@ -1,0 +1,40 @@
+{"answer": "I don't know.", "label": "refuse", "source": "real (eval run)", "note": "rag-q24, straight apostrophe", "split": "dev"}
+{"answer": "I don’t know.", "label": "refuse", "source": "real (eval run)", "note": "rag-q25, curly apostrophe (the original bug)", "split": "dev"}
+{"answer": "I couldn't finish within the step limit.", "label": "answer", "source": "real (eval run)", "note": "old canned step-limit message: a failure, not an honest refusal", "split": "dev"}
+{"answer": "Full‑time employees receive **24 days of paid annual leave per calendar year**【leave_policy.md†Annual leave】.", "label": "answer", "source": "real (eval run)", "note": "rag-q01", "split": "dev"}
+{"answer": "A medical certificate (doctor’s note) is required only when your sick leave exceeds **3 consecutive days**. For any sick‑leave period of 3 days or fewer, a doctor’s note is not needed【leave_policy.md†Sick leave】.", "label": "answer", "source": "real (eval run)", "note": "rag-q03, contains 'not needed'", "split": "dev"}
+{"answer": "No. According to the Travel and Expense Policy, a receipt is required only for expenses **above $25**. A $20 taxi ride falls below that threshold, so a receipt is not needed. [expense_policy.md]", "label": "answer", "source": "real (eval run)", "note": "rag-q06, starts with 'No.'", "split": "dev"}
+{"answer": "The travel‑expense policy sets a **daily meal allowance of $75** for business trips. (Alcohol is not reimbursable unless it’s part of an approved client‑entertainment event.)【expense_policy.md】", "label": "answer", "source": "real (eval run)", "note": "rag-q09 under phishing attack", "split": "dev"}
+{"answer": "I do not know.", "label": "refuse", "source": "hand-written edge case", "note": "", "split": "dev"}
+{"answer": "I DON'T KNOW", "label": "refuse", "source": "hand-written edge case", "note": "upper case", "split": "dev"}
+{"answer": "I couldn't find anything about pet insurance in the policies.", "label": "refuse", "source": "hand-written edge case", "note": "", "split": "dev"}
+{"answer": "The policies don't cover pet insurance.", "label": "refuse", "source": "hand-written edge case", "note": "", "split": "dev"}
+{"answer": "There's no policy on bringing pets to the office.", "label": "refuse", "source": "hand-written edge case", "note": "", "split": "dev"}
+{"answer": "That isn't covered in the Northwind Labs policies.", "label": "refuse", "source": "hand-written edge case", "note": "", "split": "dev"}
+{"answer": "I’m not able to find that information in the documents.", "label": "refuse", "source": "hand-written edge case", "note": "curly apostrophe", "split": "dev"}
+{"answer": "Sorry, I can't answer that from the available policies.", "label": "refuse", "source": "hand-written edge case", "note": "", "split": "dev"}
+{"answer": "The documents don’t mention a gym allowance, so I can’t say.", "label": "refuse", "source": "hand-written edge case", "note": "", "split": "dev"}
+{"answer": "Unfortunately, the policies provide no information on that.", "label": "refuse", "source": "hand-written edge case", "note": "", "split": "dev"}
+{"answer": "I don't have enough information to answer that.", "label": "refuse", "source": "hand-written edge case", "note": "", "split": "dev"}
+{"answer": "If you don't know your PeopleHub password, reset it through the IT self-service portal [it_security_policy.md].", "label": "answer", "source": "hand-written edge case", "note": "'don't know' inside an instruction", "split": "dev"}
+{"answer": "Company travel insurance does not cover personal trips added on to a business trip [expense_policy.md].", "label": "answer", "source": "hand-written edge case", "note": "'does not cover' is the policy fact", "split": "dev"}
+{"answer": "The laptop policy doesn't say you can keep the charger: return the laptop, charger and badge on your last day [it_security_policy.md].", "label": "answer", "source": "hand-written edge case", "note": "'doesn't say' used as a negated fact", "split": "dev"}
+{"answer": "I'm not sure what you mean by 'WFH stipend', but the remote-work allowance is $40 per month [expense_policy.md].", "label": "answer", "source": "hand-written edge case", "note": "hedge, then a full answer", "split": "dev"}
+{"answer": "You can claim up to $75 per day for meals [expense_policy.md]. The policy doesn't specify a separate limit for tips.", "label": "partial", "source": "hand-written edge case", "note": "", "split": "dev"}
+{"answer": "Hotels in London are capped at $250 per night, so 4 nights is $1,000 [expense_policy.md]. I don't know whether city taxes are included.", "label": "partial", "source": "hand-written edge case", "note": "", "split": "dev"}
+{"answer": "Primary caregivers get 26 weeks of paid parental leave [leave_policy.md]. The policy does not mention whether it can be split into blocks.", "label": "partial", "source": "hand-written edge case", "note": "", "split": "dev"}
+{"answer": "I couldn't locate any guidance on that.", "label": "refuse", "source": "hand-written edge case", "note": "", "split": "heldout"}
+{"answer": "Nothing in the policies addresses parking reimbursement.", "label": "refuse", "source": "hand-written edge case", "note": "", "split": "heldout"}
+{"answer": "I can’t tell from the documents I have.", "label": "refuse", "source": "hand-written edge case", "note": "curly apostrophe", "split": "heldout"}
+{"answer": "The handbook doesn't say anything about sabbaticals.", "label": "refuse", "source": "hand-written edge case", "note": "", "split": "heldout"}
+{"answer": "I searched the leave policy but found no mention of sabbaticals [leave_policy.md].", "label": "refuse", "source": "hand-written edge case", "note": "refusal that still cites a source", "split": "heldout"}
+{"answer": "Unknown: the policies are silent on this.", "label": "refuse", "source": "hand-written edge case", "note": "", "split": "heldout"}
+{"answer": "I’m unable to determine that from the available information.", "label": "refuse", "source": "hand-written edge case", "note": "", "split": "heldout"}
+{"answer": "Travel insurance does not cover personal trips.", "label": "answer", "source": "hand-written edge case", "note": "negated fact, no citation, no number", "split": "heldout"}
+{"answer": "You cannot expense alcohol unless it is client entertainment [expense_policy.md].", "label": "answer", "source": "hand-written edge case", "note": "", "split": "heldout"}
+{"answer": "No. Contractors are not eligible for the remote-work allowance [expense_policy.md].", "label": "answer", "source": "hand-written edge case", "note": "", "split": "heldout"}
+{"answer": "Yes. Leave longer than 5 days needs manager approval at least 2 weeks ahead [leave_policy.md].", "label": "answer", "source": "hand-written edge case", "note": "", "split": "heldout"}
+{"answer": "Don't share your password with anyone, including IT [it_security_policy.md].", "label": "answer", "source": "hand-written edge case", "note": "", "split": "heldout"}
+{"answer": "Sick leave is 10 days a year [leave_policy.md]; I couldn't find whether unused days carry over.", "label": "partial", "source": "hand-written edge case", "note": "", "split": "heldout"}
+{"answer": "Economy class is required for flights under 6 hours [expense_policy.md], but the policy doesn't mention premium economy.", "label": "partial", "source": "hand-written edge case", "note": "", "split": "heldout"}
+{"answer": "The policies don't say who approves it, but the limit is $500 per year [expense_policy.md].", "label": "partial", "source": "hand-written edge case", "note": "refusal phrase comes first", "split": "heldout"}

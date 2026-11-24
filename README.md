@@ -80,7 +80,8 @@ Two weaknesses found by evalkit were fixed:
 
 ¹ The original evalkit report said 0/3. One of those answers was
 "I don’t know" with a curly apostrophe, which the scorer didn't recognise. That
-scorer bug is fixed in `evalkit/metrics.py` and has a regression test.
+bug led to the scorer being rebuilt and tested against hand-labeled answers
+(see [Scorer validation](#scorer-validation-abstention) below).
 
 ² The first version of the stricter security prompt told the agent to include
 "only the facts asked about". That made it drop secondary details, such as
@@ -95,6 +96,49 @@ Caveats:
   until it's tested against attacks with new wording.
 - **These are single runs.** Agents aren't deterministic, so final claims need
   `repeats: 3` or more.
+
+### Scorer validation (abstention)
+
+The curly-apostrophe bug raised a bigger question: **how accurate is the scorer
+itself?** To find out, I checked it against 40 hand-labeled answers
+(`tests/fixtures/abstention_labels.jsonl`). Each answer is labeled as a
+refusal, an answer, or a partial answer (answers the question but notes a missing
+detail). Only refusals should count as abstaining.
+
+| Scorer | Dev set (25, used for tuning) | Held-out set (15, written before the change) |
+|---|---|---|
+| Old regex | 14/25 · precision 0.57 · recall 0.62 | 6/15 · precision 0.25 · recall 0.14 |
+| New scorer | **25/25** · 1.00 · 1.00 | **15/15** · 1.00 · 1.00 |
+
+- **What the old regex got wrong.** It missed refusals worded differently, such
+  as "I couldn't find…", "There's no policy on…" and "That isn't covered…". It
+  also flagged real answers as refusals because they contained a negation, such
+  as "insurance *does not cover* personal trips". And it counted every partial
+  answer as giving up, which inflated `over_abstention`.
+- **How the new scorer decides.** An answer counts as a refusal only if the
+  refusal is all it says. Negations only count when they refer to the documents
+  ("the *policy* doesn't say"), and if any other clause carries a citation or a
+  number, the answer counts as answered.
+- **Reported results are unaffected.** Re-scoring all 180 saved agent answers
+  changed no verdict, because this agent always refuses with a plain
+  "I don't know". The weakness would only have shown up with a different model
+  or agent.
+- **Both scorers now use the same check.** The RAG pipeline (`src/evaluate.py`)
+  had its own, simpler check, with the same apostrophe bug. It now uses the same
+  validated scorer.
+
+Run the check with `python -m evalkit.scorer_check --errors`. CI requires an
+exact match on the dev set and at least 0.9 precision and recall on the
+held-out set.
+
+Limits of this check:
+
+- **The held-out set isn't blind.** The same person wrote the labels and the
+  scorer, so 15/15 is optimistic.
+- **One known gap:** a partial answer with no citation and no number, such as
+  "Yes, but the policy doesn't say how often", would be scored as a refusal.
+- **What would make it stronger:** labels written or checked by someone else,
+  on refusals from a different model.
 
 ### Earlier agent eval (`src.eval_agent`, 11 cases, before hardening)
 
@@ -145,7 +189,7 @@ Every RAG run is saved to `results/runs/` and appended to `results/history.csv`.
 | Hit rate @k / MRR | Was the right document retrieved, and how high was it ranked? | No |
 | Correctness | Does the answer match the reference? (LLM judge) | Yes |
 | Faithfulness | Is every claim grounded in the retrieved context? (LLM judge) | Yes |
-| Abstention | Does it say "I don't know" on unanswerable questions? | No (rule-based) |
+| Abstention / over-abstention | Does it refuse on unanswerable questions, and only on those? | No (rule-based, checked against 40 hand labels) |
 | Task success / tool selection | Did the agent finish the task with the right tools? | Partly |
 | Injection resisted | Did a canary string from a planted attack leak into the answer or tool calls? | No |
 | Cost / latency / tokens | What does one answer cost? | No |
@@ -161,6 +205,7 @@ python examples/mock_http_agent.py                     # start a demo HTTP bot, 
 python -m evalkit run examples/http_agent.yaml         # evaluate it as a black box
 python -m evalkit run examples/qdrant_retrieval.yaml   # a vector DB on its own
 python -m evalkit compare results/evalkit/<run_a> results/evalkit/<run_b>
+python -m evalkit.scorer_check --errors                # check the abstention scorer against hand labels
 ```
 
 On free LLM tiers, keep `run.concurrency` at 1 to avoid rate-limit errors.
@@ -182,10 +227,12 @@ src/tools.py          agent tools + prompt-injection guard
 src/agent.py          tool-calling agent loop with traces
 src/eval_agent.py     the original agent evals
 evalkit/              general evaluation framework (adapters, metrics, attacks, reports)
+evalkit/scorer_check.py  checks the abstention scorer against hand labels
 examples/             evalkit configs and adapters (Python, HTTP, Qdrant)
 app.py                Streamlit UI
 mcp_server.py         the agent's tools over MCP
 tests/                unit tests (fake LLM, no API key)
+tests/fixtures/       hand-labeled answers for scorer validation
 .github/workflows/    tests + retrieval eval on every push
 ```
 
@@ -195,8 +242,11 @@ tests/                unit tests (fake LLM, no API key)
 - **A larger golden set** with multi-part, cross-document and tricky
   unanswerable questions. 25 questions is a start, not a benchmark.
 - **New-wording injection attacks**, to measure how well the guard generalises.
-- **Judge validation:** hand-grade 20 or more answers and report how often the
-  LLM judge agrees.
+- **Judge validation:** the abstention scorer is now checked against hand
+  labels. Do the same for the LLM judge: hand-grade 20 or more answers and
+  report how often its correctness and faithfulness scores agree.
+- **Blind scorer labels:** add about 15 refusals from a different model, labeled
+  by someone other than the scorer's author.
 - **Repeated runs** (`repeats: 3`) to report variance, not single numbers.
 
 ## License

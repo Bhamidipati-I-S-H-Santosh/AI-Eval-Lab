@@ -66,7 +66,9 @@ def parse_judge(text: str) -> dict:
 
 
 def is_abstention(answer: str) -> bool:
-    return "don't know" in answer.lower() or "do not know" in answer.lower()
+    # Same scorer as evalkit, validated against hand labels (python -m evalkit.scorer_check).
+    from evalkit.metrics import abstained
+    return abstained(answer)
 
 
 def run(args) -> dict:
