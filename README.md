@@ -111,3 +111,9 @@ python -m evalkit run examples/qdrant_retrieval.yaml   # a vector DB on its own
 
 **Guides:** [BUILD_GUIDE.md](BUILD_GUIDE.md) (build the agent step by step) ·
 [EVALKIT.md](EVALKIT.md) (connect and evaluate any system)
+
+## License
+
+Copyright (c) 2026 Bhamidipati I S H Santosh. **All rights reserved.**
+This code may not be used, copied, modified or distributed without prior written
+permission. See [LICENSE](LICENSE).
