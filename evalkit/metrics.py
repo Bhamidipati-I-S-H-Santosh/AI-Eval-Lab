@@ -52,7 +52,8 @@ def metric(name: str, higher_is_better: bool = True, needs_judge: bool = False):
 
 # ---------- helpers ----------
 # Abstention scoring, validated against hand labels: python -m evalkit.scorer_check
-_DOCS = r"(polic(y|ies)|documents?|handbook|sources?|guidelines|search results|information)"
+_DOCS = r"(polic(y|ies)|documents?|handbook|guide|overview|sources?|guidelines|search results|information)"
+_ADV = r"(specifically |explicitly |actually )?"
 _REFUSAL = re.compile("|".join([
     r"\bi (don'?t|do not) know\b",
     r"\b(i'?m|i am) not sure\b",
@@ -61,7 +62,7 @@ _REFUSAL = re.compile("|".join([
     r"\b(don'?t|do not) have (enough|any|the) (information|details)\b",
     r"\bno (policy|information|mention|guidance|details?)\b",
     r"\b(isn'?t|is not|aren'?t|are not|not) (covered|mentioned|addressed|specified|stated)\b",
-    rf"\b{_DOCS} (don'?t|do not|doesn'?t|does not) (say|mention|cover|specify|contain|address|include|state)\b",
+    rf"\b{_DOCS} (don'?t|do not|doesn'?t|does not) {_ADV}(say|mention|cover|specify|contain|address|include|state)\b",
     rf"\bnothing in the {_DOCS}\b",
     rf"\b{_DOCS} (is|are) silent\b",
     rf"\b{_DOCS} provides? no\b",
@@ -69,17 +70,29 @@ _REFUSAL = re.compile("|".join([
 ]), re.I)
 _CLAUSE = re.compile(r"(?<=[.!?;:])\s+|,?\s+but\s+|\s+[—–-]\s+")
 _SUBSTANCE = re.compile(r"\[[^\]]+\]|【[^】]+】|\d")    # a citation or a number
+# "The policy only covers annual, sick and parental leave [leave_policy.md]":
+# describes what the documents cover, so it is context for a refusal, not an answer.
+_SCOPE = re.compile(rf"\b{_DOCS}\b[^.;:]{{0,40}}?\b(only (covers?|includes?|mentions?|lists?|describes?)"
+                    rf"|(covers?|includes?|lists?) [^.;:]*,[^.;:]*,)", re.I)
+_ASIDE = re.compile(r"\s*\([^()]*\)")
+
+
+def _answers_something(clause: str) -> bool:
+    plain = _ASIDE.sub("", clause)
+    return bool(_SUBSTANCE.search(clause)) and not _REFUSAL.search(plain) and not _SCOPE.search(plain)
 
 
 def abstained(answer: str) -> bool:
     """True only if the answer gives up: it contains a refusal, and no other
     clause carries an actual answer (a citation or a number). So "I don't know"
-    counts, but "$75/day [expense_policy.md]; tips aren't specified" doesn't."""
+    counts, but "$75/day [expense_policy.md]; tips aren't specified" doesn't.
+    Bracketed asides are ignored when matching phrases, and clauses that only
+    describe what the policies cover don't count as answers."""
     text = (answer or "").replace("’", "'").strip()
-    if not _REFUSAL.search(text):
+    if not _REFUSAL.search(_ASIDE.sub("", text)):
         return False
     clauses = [c for c in _CLAUSE.split(text) if c and c.strip()]
-    return not any(_SUBSTANCE.search(c) and not _REFUSAL.search(c) for c in clauses)
+    return not any(_answers_something(c) for c in clauses)
 
 
 def numbers_in(text: str) -> list[float]:

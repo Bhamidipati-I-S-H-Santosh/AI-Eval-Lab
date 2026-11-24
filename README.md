@@ -100,15 +100,18 @@ Caveats:
 ### Scorer validation (abstention)
 
 The curly-apostrophe bug raised a bigger question: **how accurate is the scorer
-itself?** To find out, I checked it against 40 hand-labeled answers
-(`tests/fixtures/abstention_labels.jsonl`). Each answer is labeled as a
+itself?** To find out, I checked it against 40 hand-labeled answers, then 30
+answers from other models, labeled blind (`tests/fixtures/abstention_labels.jsonl`). Each answer is labeled as a
 refusal, an answer, or a partial answer (answers the question but notes a missing
 detail). Only refusals should count as abstaining.
 
-| Scorer | Dev set (25, used for tuning) | Held-out set (15, written before the change) |
-|---|---|---|
-| Old regex | 14/25 · precision 0.57 · recall 0.62 | 6/15 · precision 0.25 · recall 0.14 |
-| New scorer | **25/25** · 1.00 · 1.00 | **15/15** · 1.00 · 1.00 |
+| Scorer | Dev (25, hand-written) | Held-out (15, hand-written) | Blind (30, other models) |
+|---|---|---|---|
+| Old regex | 14/25 · P 0.57 · R 0.62 | 6/15 · P 0.25 · R 0.14 | – |
+| v2: clause rule | **25/25** · 1.00 · 1.00 | **15/15** · 1.00 · 1.00 | 26/30 · P 1.00 · **R 0.67** |
+| v3: + context fix | **25/25** · 1.00 · 1.00 | **15/15** · 1.00 · 1.00 | **29/30** · P 1.00 · R 0.92 |
+
+P = precision, R = recall on refusals.
 
 - **What the old regex got wrong.** It missed refusals worded differently, such
   as "I couldn't find…", "There's no policy on…" and "That isn't covered…". It
@@ -127,18 +130,44 @@ detail). Only refusals should count as abstaining.
   had its own, simpler check, with the same apostrophe bug. It now uses the same
   validated scorer.
 
+**The blind test found what the hand-written sets missed.** The hand-written
+held-out set wasn't truly blind, because the same person wrote it and the
+scorer. So I ran a real blind test:
+
+- **Answers from other models.** gpt-oss-20b and Qwen3.8-27B answered 16 new
+  questions, with a neutral prompt that didn't dictate how to word a refusal.
+- **Independent labels.** gpt-oss-120b, which wrote none of the answers, labeled
+  them without seeing the scorer.
+
+v2 caught only 8 of 12 refusals. Qwen often refuses and then says what the
+policy *does* cover ("The policy only covers annual, sick and parental leave
+[leave_policy.md]"), and the scorer read that citation as an answer. It also
+missed "The documents (benefits, expense, …) don't contain…", because the
+bracketed list broke the phrase.
+
+v3 fixes both: sentences that only describe what the policies cover don't count
+as answers, and bracketed asides are ignored when matching phrases.
+
 Run the check with `python -m evalkit.scorer_check --errors`. CI requires an
-exact match on the dev set and at least 0.9 precision and recall on the
-held-out set.
+exact match on dev, and at least 0.9 precision and recall on held-out and
+blind-v1.
 
 Limits of this check:
 
-- **The held-out set isn't blind.** The same person wrote the labels and the
-  scorer, so 15/15 is optimistic.
-- **One known gap:** a partial answer with no citation and no number, such as
-  "Yes, but the policy doesn't say how often", would be scored as a refusal.
-- **What would make it stronger:** labels written or checked by someone else,
-  on refusals from a different model.
+- **Blind-v1 is no longer blind.** It was used to build v3, so 29/30 is a tuning
+  score. The next honest number needs a fresh batch of answers from another
+  model.
+- **The blind labels need checking too.** gpt-oss-120b labeled 4 clear refusals
+  as answers, such as "I couldn't find any policy that mentions pet insurance".
+  Those 4 were corrected and are marked `label_by` in the fixture. Human review
+  of the labels is still pending.
+- **Known gaps:**
+  - The remaining miss is a refusal followed by an unrelated fact containing a
+    number ("…the buddy program runs for the first 90 days").
+  - A partial answer with no citation and no number ("Yes, but the policy
+    doesn't say how often") is scored as a refusal.
+  - An answer that only lists what a policy covers, followed by "the policy
+    doesn't mention X", could also be scored as a refusal.
 
 ### Earlier agent eval (`src.eval_agent`, 11 cases, before hardening)
 
@@ -189,7 +218,7 @@ Every RAG run is saved to `results/runs/` and appended to `results/history.csv`.
 | Hit rate @k / MRR | Was the right document retrieved, and how high was it ranked? | No |
 | Correctness | Does the answer match the reference? (LLM judge) | Yes |
 | Faithfulness | Is every claim grounded in the retrieved context? (LLM judge) | Yes |
-| Abstention / over-abstention | Does it refuse on unanswerable questions, and only on those? | No (rule-based, checked against 40 hand labels) |
+| Abstention / over-abstention | Does it refuse on unanswerable questions, and only on those? | No (rule-based, checked against 70 labeled answers) |
 | Task success / tool selection | Did the agent finish the task with the right tools? | Partly |
 | Injection resisted | Did a canary string from a planted attack leak into the answer or tool calls? | No |
 | Cost / latency / tokens | What does one answer cost? | No |
@@ -245,8 +274,9 @@ tests/fixtures/       hand-labeled answers for scorer validation
 - **Judge validation:** the abstention scorer is now checked against hand
   labels. Do the same for the LLM judge: hand-grade 20 or more answers and
   report how often its correctness and faithfulness scores agree.
-- **Blind scorer labels:** add about 15 refusals from a different model, labeled
-  by someone other than the scorer's author.
+- **A fresh blind set (blind-v2)** for the abstention scorer: new questions,
+  another model and human-reviewed labels, scored once before any further
+  tuning.
 - **Repeated runs** (`repeats: 3`) to report variance, not single numbers.
 
 ## License

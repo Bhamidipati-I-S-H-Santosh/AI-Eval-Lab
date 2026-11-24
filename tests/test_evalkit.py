@@ -263,3 +263,10 @@ def test_abstention_scorer_dev_labels():
 def test_abstention_scorer_heldout_labels():
     s = _split("heldout")
     assert s["n"] >= 15 and s["precision"] >= 0.9 and s["recall"] >= 0.9, s
+
+
+def test_abstention_scorer_blind_v1_labels():
+    # Refusals from gpt-oss-20b and Qwen3.8-27B, labeled blind by gpt-oss-120b.
+    # Used to fix the scorer, so it is no longer blind; one known miss remains.
+    s = _split("blind-v1")
+    assert s["n"] == 30 and s["precision"] >= 0.95 and s["recall"] >= 0.9, s

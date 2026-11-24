@@ -37,7 +37,7 @@ def score(rows: list[dict], fn=abstained) -> dict:
 def main(argv=None) -> None:
     argv = sys.argv[1:] if argv is None else argv
     rows = load()
-    for split in ("dev", "heldout"):
+    for split in ("dev", "heldout", "blind-v1"):
         s = score([r for r in rows if r.get("split") == split])
         print(f"{split:8} agree {s['agree']}/{s['n']}  precision {s['precision']:.2f}  recall {s['recall']:.2f}")
         if "--errors" in argv:
