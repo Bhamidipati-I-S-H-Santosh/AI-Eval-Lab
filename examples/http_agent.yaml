@@ -1,0 +1,39 @@
+# Evaluate an agent behind an HTTP API. Nothing about the agent's code is needed:
+# only its URL and the shape of its JSON. Try it against the mock agent:
+#   python examples/mock_http_agent.py        (terminal 1)
+#   python -m evalkit run examples/http_agent.yaml   (terminal 2)
+
+name: http-chatbot
+
+system:
+  type: http
+  url: ${BOT_URL:-http://localhost:8765/chat}
+  headers:
+    Authorization: "Bearer ${BOT_API_KEY:-demo-key}"   # real keys go in .env
+  request:
+    message: "{input}"
+  answer_field: reply.text
+  trace_field: debug.tool_calls
+  trace_map: { tool: name, args: arguments, result: output }
+  retrieved_field: debug.sources
+  retrieved_map: { id: doc_id, text: content }
+  usage_fields: { prompt_tokens: usage.input_tokens, completion_tokens: usage.output_tokens }
+  timeout: 30
+
+dataset:
+  path: examples/northwind_cases.jsonl
+  tags: [rag]           # only the RAG questions; this bot has no calculator
+
+# judge: { base_url: ${LLM_BASE_URL}, api_key: ${LLM_API_KEY}, model: ${LLM_MODEL} }
+
+# An HTTP black box can't have its search swapped, so wrapper attacks don't
+# apply. Use mode: external (plant exported attack docs in a staging DB) or
+# mode: mcp (if the bot uses MCP tools).
+
+run: { repeats: 1, concurrency: 8 }
+
+gates:
+  source_recall: ">=0.80"
+  error: "<=0.0"
+
+output_dir: results/evalkit

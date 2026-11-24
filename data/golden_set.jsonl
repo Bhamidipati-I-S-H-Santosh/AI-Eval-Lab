@@ -1,0 +1,25 @@
+{"id": "q01", "question": "How many days of paid annual leave do full-time employees get?", "answer": "24 days per calendar year.", "source": "leave_policy.md"}
+{"id": "q02", "question": "How many unused vacation days can I carry into next year, and when do they expire?", "answer": "Up to 8 days, expiring on March 31.", "source": "leave_policy.md"}
+{"id": "q03", "question": "When do I need a doctor's note for being sick?", "answer": "A medical certificate is required for sick leave longer than 3 consecutive days.", "source": "leave_policy.md"}
+{"id": "q04", "question": "How long is paid leave for a secondary caregiver after a baby is born?", "answer": "6 weeks of fully paid leave.", "source": "leave_policy.md"}
+{"id": "q05", "question": "How far in advance must I request a 7-day holiday?", "answer": "At least 2 weeks in advance, with direct manager approval.", "source": "leave_policy.md"}
+{"id": "q06", "question": "Do I need a receipt for a $20 taxi ride?", "answer": "No, receipts are only required for expenses above $25.", "source": "expense_policy.md"}
+{"id": "q07", "question": "Can I fly business class on a 4-hour flight?", "answer": "No, economy is required for flights under 6 hours.", "source": "expense_policy.md"}
+{"id": "q08", "question": "What is the hotel limit per night in London?", "answer": "$320 per night, since London is a high-cost city.", "source": "expense_policy.md"}
+{"id": "q09", "question": "How much can I spend on food per day while travelling for work?", "answer": "$75 per day.", "source": "expense_policy.md"}
+{"id": "q10", "question": "Will the company pay for my internet at home?", "answer": "Yes, $40 per month toward internet costs.", "source": "expense_policy.md"}
+{"id": "q11", "question": "What is the minimum password length?", "answer": "14 characters.", "source": "it_security.md"}
+{"id": "q12", "question": "Can I use text message codes for two-factor login?", "answer": "No, SMS codes are not accepted; use Authy or a hardware security key.", "source": "it_security.md"}
+{"id": "q13", "question": "I left my laptop on the train. How quickly must I report it?", "answer": "Within 1 hour of discovery, to security@northwindlabs.example.", "source": "it_security.md"}
+{"id": "q14", "question": "Can I paste customer credit card data into ChatGPT?", "answer": "No, Restricted data such as customer payment information may never be pasted into external AI tools.", "source": "it_security.md"}
+{"id": "q15", "question": "Which days do hybrid employees come to the office?", "answer": "Tuesdays and Thursdays.", "source": "remote_work.md"}
+{"id": "q16", "question": "How long can I work from another country each year?", "answer": "Up to 30 days per calendar year, requested at least 3 weeks before travel.", "source": "remote_work.md"}
+{"id": "q17", "question": "When is the company offsite held?", "answer": "Every October.", "source": "remote_work.md"}
+{"id": "q18", "question": "How long do new hires have to complete security training?", "answer": "Within the first 5 working days.", "source": "onboarding.md"}
+{"id": "q19", "question": "How long is probation at Northwind?", "answer": "3 months.", "source": "onboarding.md"}
+{"id": "q20", "question": "How much money do I get each year for courses and conferences?", "answer": "$1,500 per year, and unused budget does not roll over.", "source": "benefits.md"}
+{"id": "q21", "question": "Does the company help pay for the gym?", "answer": "Yes, up to $60 per month toward a gym membership or fitness app.", "source": "benefits.md"}
+{"id": "q22", "question": "When does the retirement match fully vest?", "answer": "After 2 years of employment.", "source": "benefits.md"}
+{"id": "q23", "question": "How often are laptops replaced?", "answer": "Every 3 years, with early refresh if the device fails a hardware diagnostic.", "source": "benefits.md"}
+{"id": "q24", "question": "What is the company's policy on bringing dogs to the office?", "answer": "UNANSWERABLE", "source": null}
+{"id": "q25", "question": "How many stock options do new engineers receive?", "answer": "UNANSWERABLE", "source": null}

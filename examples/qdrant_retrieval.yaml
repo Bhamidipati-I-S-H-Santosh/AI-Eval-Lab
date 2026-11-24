@@ -1,0 +1,27 @@
+# Evaluate a vector database on its own (no agent, no LLM, free and fast).
+# With no 'system' block, evalkit scores retrieval directly.
+#   python examples/load_qdrant.py --embedder hash:256
+#   python -m evalkit run examples/qdrant_retrieval.yaml
+
+name: qdrant-retrieval
+
+retriever:
+  type: qdrant
+  collection: northwind
+  path: qdrant_data          # or url: http://localhost:6333
+  embedder: hash:256         # MUST match how the collection was built
+  text_field: text
+  id_field: doc_id
+
+dataset:
+  path: examples/northwind_cases.jsonl
+  tags: [rag]
+
+metrics: [source_recall, source_mrr, latency_s, error]
+
+run: { k: 5, repeats: 1, concurrency: 8 }
+
+gates:
+  source_recall: ">=0.70"
+
+output_dir: results/evalkit

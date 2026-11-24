@@ -1,0 +1,7 @@
+timestamp,method,rerank,chunking,top_k,n_chunks,hit_rate,mrr,correctness,faithfulness,abstention,avg_latency_s
+2026-11-22T13:38:46,bm25,False,section,3,22,0.913,0.891,0.739,1.0,1.0,7.289
+2026-11-22T13:39:30,bm25,False,section,3,22,0.913,0.891,,,,0.0
+2026-11-22T13:39:35,bm25,False,section,3,22,0.913,0.891,,,,0.0
+2026-11-22T13:42:37,hybrid,True,section,3,22,1.0,1.0,0.783,0.96,1.0,7.854
+2026-11-23T11:19:49,bm25,False,section,3,22,0.913,0.891,,,,0.0
+2026-11-23T11:21:17,hybrid,False,section,3,22,0.957,0.957,,,,0.013

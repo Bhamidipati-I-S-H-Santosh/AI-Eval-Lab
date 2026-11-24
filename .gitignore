@@ -1,0 +1,10 @@
+.env
+__pycache__/
+.venv/
+.pytest_cache/
+.evalkit_cache/
+qdrant_data/
+results/runs/
+results/agent_runs/
+results/evalkit/
+.venv-local/
