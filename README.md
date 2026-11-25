@@ -100,18 +100,25 @@ Caveats:
 ### Scorer validation (abstention)
 
 The curly-apostrophe bug raised a bigger question: **how accurate is the scorer
-itself?** To find out, I checked it against 40 hand-labeled answers, then 30
-answers from other models, labeled blind (`tests/fixtures/abstention_labels.jsonl`). Each answer is labeled as a
+itself?** To find out, I checked it against 40 hand-labeled answers, then two
+sets of answers from other models, labeled blind (30 and 32 answers;
+`tests/fixtures/abstention_labels.jsonl`). Each answer is labeled as a
 refusal, an answer, or a partial answer (answers the question but notes a missing
 detail). Only refusals should count as abstaining.
 
-| Scorer | Dev (25, hand-written) | Held-out (15, hand-written) | Blind (30, other models) |
-|---|---|---|---|
-| Old regex | 14/25 · P 0.57 · R 0.62 | 6/15 · P 0.25 · R 0.14 | – |
-| v2: clause rule | **25/25** · 1.00 · 1.00 | **15/15** · 1.00 · 1.00 | 26/30 · P 1.00 · **R 0.67** |
-| v3: + context fix | **25/25** · 1.00 · 1.00 | **15/15** · 1.00 · 1.00 | **29/30** · P 1.00 · R 0.92 |
+| Scorer | Dev (25, hand-written) | Held-out (15, hand-written) | Blind-v1 (29, other models) | Blind-v2 (32, scored once) |
+|---|---|---|---|---|
+| Old regex | 14/25 · P 0.57 · R 0.62 | 6/15 · P 0.25 · R 0.14 | – | – |
+| v2: clause rule | **25/25** · 1.00 · 1.00 | **15/15** · 1.00 · 1.00 | 25/29 · P 1.00 · **R 0.64** | – |
+| v3: + context fix | **25/25** · 1.00 · 1.00 | **15/15** · 1.00 · 1.00 | 28/29 · P 1.00 · R 0.91 | **27/32 · P 1.00 · R 0.62** (blind) |
+| v4: + new refusal wordings | **25/25** · 1.00 · 1.00 | **15/15** · 1.00 · 1.00 | 28/29 · P 1.00 · R 0.91 | 32/32 · P 1.00 · R 1.00 (tuned) |
 
 P = precision, R = recall on refusals.
+
+- **The honest number is v3's 27/32 on blind-v2.** That set was built after v3
+  was finished and was scored once.
+- **v4's 32/32 is a tuning score.** v4 was fixed using blind-v2, so v4 has no
+  blind number yet; that needs a blind-v3.
 
 - **What the old regex got wrong.** It missed refusals worded differently, such
   as "I couldn't find…", "There's no policy on…" and "That isn't covered…". It
@@ -148,19 +155,44 @@ bracketed list broke the phrase.
 v3 fixes both: sentences that only describe what the policies cover don't count
 as answers, and bracketed asides are ignored when matching phrases.
 
+**Blind-v2: the honest number.** I wrote 16 new questions on topics v1 didn't
+touch. gpt-oss-120b, which generated none of the v1 answers, answered them in two
+prompt styles: neutral, and brief and conversational. Qwen3.8-27B labeled the
+answers blind, and the labels were frozen before the scorer ran.
+
+- **Result:** v3 agrees on 27/32, with no false alarms, but catches only 8 of 13
+  refusals.
+- **All 5 misses come from the conversational prompt.** They use wordings the
+  scorer has no pattern for: "I **didn't find** any mention of…",
+  "I'm **not seeing**…", "I **don't see** any mention of…" and
+  "the policies **don't include** a specific… provision".
+- **What it shows:** the scorer catches the wordings it has seen, not refusals
+  in general. Each new model or prompt style brings new refusal wordings.
+
+v4 adds those as general refusal patterns: "didn't / did not find or see",
+"I don't see", "I'm not seeing / finding" and "nothing about…". It now catches
+all 13 blind-v2 refusals with no false alarms, the other sets are unchanged, and
+none of the 180 saved agent answers changes verdict.
+
 Run the check with `python -m evalkit.scorer_check --errors`. CI requires an
-exact match on dev, and at least 0.9 precision and recall on held-out and
-blind-v1.
+exact match on dev and blind-v2, and at least 0.9 precision and recall on
+held-out and blind-v1.
 
 Limits of this check:
 
-- **Blind-v1 is no longer blind.** It was used to build v3, so 29/30 is a tuning
-  score. The next honest number needs a fresh batch of answers from another
-  model.
-- **The blind labels need checking too.** gpt-oss-120b labeled 4 clear refusals
-  as answers, such as "I couldn't find any policy that mentions pet insurance".
-  Those 4 were corrected and are marked `label_by` in the fixture. Human review
-  of the labels is still pending.
+- **Blind-v1 is no longer blind.** It was used to build v3, so 28/29 is a
+  tuning score.
+- **The blind-v1 labels were reviewed.** gpt-oss-120b labeled 4 refusals as
+  answers. Each one got a second opinion from a model that didn't write it:
+  - 1 is confirmed as a refusal.
+  - 1 is now "ambiguous" and left out of the score. It says "Northwind does
+    **not** offer pet insurance" as a fact, while also saying there's "no
+    mention" of it.
+  - 2 are kept as refusals but marked as disputed. Both other models read
+    "the policy doesn't list parking" on a yes/no question as an answer ("No").
+  - This yes/no rule is now explicit in the blind-v2 labeling prompt.
+  - Every decision is recorded in `label_by` in the fixture. No labels have been
+    reviewed by a human yet.
 - **Known gaps:**
   - The remaining miss is a refusal followed by an unrelated fact containing a
     number ("…the buddy program runs for the first 90 days").
@@ -218,7 +250,7 @@ Every RAG run is saved to `results/runs/` and appended to `results/history.csv`.
 | Hit rate @k / MRR | Was the right document retrieved, and how high was it ranked? | No |
 | Correctness | Does the answer match the reference? (LLM judge) | Yes |
 | Faithfulness | Is every claim grounded in the retrieved context? (LLM judge) | Yes |
-| Abstention / over-abstention | Does it refuse on unanswerable questions, and only on those? | No (rule-based, checked against 70 labeled answers) |
+| Abstention / over-abstention | Does it refuse on unanswerable questions, and only on those? | No (rule-based, checked against 102 labeled answers) |
 | Task success / tool selection | Did the agent finish the task with the right tools? | Partly |
 | Injection resisted | Did a canary string from a planted attack leak into the answer or tool calls? | No |
 | Cost / latency / tokens | What does one answer cost? | No |
@@ -274,9 +306,10 @@ tests/fixtures/       hand-labeled answers for scorer validation
 - **Judge validation:** the abstention scorer is now checked against hand
   labels. Do the same for the LLM judge: hand-grade 20 or more answers and
   report how often its correctness and faithfulness scores agree.
-- **A fresh blind set (blind-v2)** for the abstention scorer: new questions,
-  another model and human-reviewed labels, scored once before any further
-  tuning.
+- **Blind-v3 for abstention scorer v4:** new questions and another model or
+  prompt style, scored once. v4 has no blind number yet. Longer term, an LLM-judge abstention check,
+  validated against these 100+ labels, may generalise better than adding more
+  patterns.
 - **Repeated runs** (`repeats: 3`) to report variance, not single numbers.
 
 ## License

@@ -266,7 +266,16 @@ def test_abstention_scorer_heldout_labels():
 
 
 def test_abstention_scorer_blind_v1_labels():
-    # Refusals from gpt-oss-20b and Qwen3.8-27B, labeled blind by gpt-oss-120b.
-    # Used to fix the scorer, so it is no longer blind; one known miss remains.
+    # Refusals from gpt-oss-20b and Qwen3.8-27B, labeled blind by gpt-oss-120b,
+    # 4 labels reviewed (1 now "ambiguous"). Used to fix the scorer, so it is no
+    # longer blind; one known miss remains.
     s = _split("blind-v1")
-    assert s["n"] == 30 and s["precision"] >= 0.95 and s["recall"] >= 0.9, s
+    assert s["n"] == 29 and s["precision"] >= 0.95 and s["recall"] >= 0.9, s
+
+
+def test_abstention_scorer_blind_v2_labels():
+    # gpt-oss-120b answers (2 prompt styles), labeled blind by Qwen3.8-27B and
+    # frozen before scoring. v3 scored 27/32 (recall 0.62) blind; v4 added the
+    # refusal wordings it missed, so this is now tuning data (32/32).
+    s = _split("blind-v2")
+    assert s["n"] == 32 and not s["wrong"], s["wrong"]

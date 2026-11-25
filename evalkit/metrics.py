@@ -57,8 +57,11 @@ _ADV = r"(specifically |explicitly |actually )?"
 _REFUSAL = re.compile("|".join([
     r"\bi (don'?t|do not) know\b",
     r"\b(i'?m|i am) not sure\b",
-    r"\b(couldn'?t|could not|can'?t|cannot|unable to|(was|am|'m) not able to|wasn'?t able to)"
-    r" (find|locate|answer|say|tell|determine|confirm)\b",
+    r"\b(couldn'?t|could not|can'?t|cannot|didn'?t|did not|unable to|(was|am|'m) not able to|wasn'?t able to)"
+    r" (find|locate|see|spot|answer|say|tell|determine|confirm)\b",
+    r"\bi (don'?t|do not) see\b",
+    r"\b(i'?m|i am) not (seeing|finding)\b",
+    r"\bnothing (about|on|regarding)\b",
     r"\b(don'?t|do not) have (enough|any|the) (information|details)\b",
     r"\bno (policy|information|mention|guidance|details?)\b",
     r"\b(isn'?t|is not|aren'?t|are not|not) (covered|mentioned|addressed|specified|stated)\b",

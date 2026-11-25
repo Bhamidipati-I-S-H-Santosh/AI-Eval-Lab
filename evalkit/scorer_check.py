@@ -8,7 +8,10 @@ Labels (tests/fixtures/abstention_labels.jsonl):
   answer  - a real answer, even if it contains "not" / "doesn't": must not
   partial - answers the question but notes a missing detail: must not
             (on an answerable question that is not "giving up")
-Tune on the dev split only; the heldout split is the honest score."""
+  ambiguous - labelers disagree on what the right label is: left out of the score
+Splits: dev (tuning), heldout (hand-written), blind-v1 and blind-v2 (other
+models; each scored blind once, then used to fix the scorer, so now tuning
+data). After tuning on a blind split, the next honest number needs a new one."""
 from __future__ import annotations
 
 import json
@@ -25,6 +28,7 @@ def load(path: Path = LABELS) -> list[dict]:
 
 
 def score(rows: list[dict], fn=abstained) -> dict:
+    rows = [r for r in rows if r["label"] != "ambiguous"]
     tp = sum(fn(r["answer"]) and r["label"] == "refuse" for r in rows)
     fp = sum(fn(r["answer"]) and r["label"] != "refuse" for r in rows)
     fn_ = sum(not fn(r["answer"]) and r["label"] == "refuse" for r in rows)
@@ -37,7 +41,7 @@ def score(rows: list[dict], fn=abstained) -> dict:
 def main(argv=None) -> None:
     argv = sys.argv[1:] if argv is None else argv
     rows = load()
-    for split in ("dev", "heldout", "blind-v1"):
+    for split in dict.fromkeys(r.get("split") for r in rows):
         s = score([r for r in rows if r.get("split") == split])
         print(f"{split:8} agree {s['agree']}/{s['n']}  precision {s['precision']:.2f}  recall {s['recall']:.2f}")
         if "--errors" in argv:
