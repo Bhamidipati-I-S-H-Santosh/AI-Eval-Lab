@@ -100,22 +100,30 @@ Caveats:
 ### Scorer validation (abstention)
 
 The curly-apostrophe bug raised a bigger question: **how accurate is the scorer
-itself?** To find out, I checked it against 40 hand-labeled answers, then three
-sets of answers from other models, labeled blind (30, 32 and 32 answers;
+itself?** To find out, I checked it against 40 hand-labeled answers, then four
+sets of answers from other models, labeled blind (30, 32, 32 and 35 answers;
 `tests/fixtures/abstention_labels.jsonl`). Each answer is labeled as a
 refusal, an answer, or a partial answer (answers the question but notes a missing
 detail). Only refusals should count as abstaining.
 
-| Scorer | Dev (25) | Held-out (15) | Blind-v1 (29) | Blind-v2 (32) | Blind-v3 (32) |
-|---|---|---|---|---|---|
-| Old regex | 14/25 · P 0.57 · R 0.62 | 6/15 · P 0.25 · R 0.14 | – | – | – |
-| v2: clause rule | **25/25** | **15/15** | 25/29 · P 1.00 · R 0.64 **(blind)** | – | – |
-| v3: + context fix | **25/25** | **15/15** | 28/29 · P 1.00 · R 0.91 | 27/32 · P 1.00 · R 0.62 **(blind)** | – |
-| v4: + new refusal wordings | **25/25** | **15/15** | 28/29 · P 1.00 · R 0.91 | 32/32 · P 1.00 · R 1.00 | 24/32 · P 0.75 · R 0.50 **(blind)** |
+| Scorer | Dev (25) | Held-out (15) | Blind-v1 (29) | Blind-v2 (32) | Blind-v3 (32) | Blind-v4 (35) |
+|---|---|---|---|---|---|---|
+| Old regex | 14/25 · P 0.57 · R 0.62 | 6/15 · P 0.25 · R 0.14 | – | – | – | – |
+| v2: clause rule | **25/25** | **15/15** | 25/29 · P 1.00 · R 0.64 **(blind)** | – | – | – |
+| v3: + context fix | **25/25** | **15/15** | 28/29 · P 1.00 · R 0.91 | 27/32 · P 1.00 · R 0.62 **(blind)** | – | – |
+| v4: + new refusal wordings | **25/25** | **15/15** | 28/29 · P 1.00 · R 0.91 | 32/32 · P 1.00 · R 1.00 | 23/32 · P 0.75 · R 0.46 **(blind)**¹ | 16/35 · P 0.83 · R 0.22 |
+| v5: markdown, "what I checked", lead sentence | **25/25** | **15/15** | 28/29 · P 1.00 · R 0.91 | **32/32** | 25/32 · P 0.71 · R 0.77 | 18/35 · P 0.88 · R 0.30 **(blind)** |
+| LLM judge only (gpt-oss-20b, untuned) | 21/25 · P 0.85 · R 0.85 | 12/15 · P 1.00 · R 0.57 | 24/29 · P 1.00 · R 0.55 | 28/32 · P 1.00 · R 0.69 | 27/32 · P 1.00 · R 0.62 | 20/35 · P 1.00 · R 0.35 **(blind)** |
+| Hybrid: v5 when sure, judge otherwise | 24/25 · P 0.93 · R 1.00 | **15/15** | 28/29 · P 1.00 · R 0.91 | **32/32** | 27/32 · P 0.83 · R 0.77 | **22/35 · P 0.92 · R 0.48 (blind)** |
 
 P = precision, R = recall on refusals; a bare score means 1.00 / 1.00.
 "(blind)" marks the first and only time a scorer saw that set. Every other
-cell is a tuning score.
+regex or hybrid cell is a tuning score. The judge prompt was written once and
+never changed, so all of its cells are effectively untuned.
+
+¹ First scored as 24/32 · R 0.50. A second labeler later disputed one row,
+which was resolved as a refusal (see below), so the same predictions now
+score 23/32 · R 0.46.
 
 **Each blind number is lower than the tuning scores**: R 0.64 → 0.62 → 0.50 as
 the prompt styles got further from what the scorer was built on. Adding
@@ -194,10 +202,81 @@ refusals and raised 2 false alarms. It failed in three new ways:
   acceptable.**" merges with the next sentences, so a real partial answer reads
   as a refusal.
 
-Run the check with `python -m evalkit.scorer_check --errors`. CI requires an
-exact match on dev and blind-v2, and at least 0.9 precision and recall on
-held-out and blind-v1. It records blind-v3 at its measured level (precision
-≥ 0.75, recall ≥ 0.5), so a regression shows up.
+**Three changes beyond more patterns.**
+
+- **The agent declares its own status.** It ends every answer with
+  `Status: answered | partial | unanswerable`. The line is stripped from the
+  answer and stored on the result (`AgentResult.status`; `status_field` for
+  HTTP agents). When an agent declares a status, the scorer uses it instead of
+  reading the text. This only works for agents you control, and it hasn't
+  been checked on a live run yet.
+- **An LLM judge that sees the question** (`evalkit/abstention.py`,
+  `JUDGE_PROMPT`). It labels each reply refuse, answer or partial. It runs
+  zero-shot on gpt-oss-20b, which wrote and labeled none of the scored sets,
+  and the prompt was frozen before any score was seen.
+- **Regex v5 as a cheap first pass.** It strips markdown before splitting
+  sentences, treats "I searched / checked…" and "the closest related item…"
+  as context rather than answers, and lets the lead sentence decide when a
+  refusal and an answer-like sentence appear together. When it can't tell,
+  it says "uncertain" and the hybrid asks the judge.
+
+**Two labelers, with disputes resolved by one rule.** Every blind answer now
+has a second label from a different model (gpt-oss-120b and Qwen3.8-27B).
+When they disagree on refuse vs not, the row is "pending" and left out of the
+score until it gets a `label_human`. All 16 disputes had the same shape:
+"No, the policies don't mention X". gpt-oss-120b called that an answer, and
+Qwen called it a refusal. They were resolved with one rule, chosen by the
+project owner and applied by Claude: **"No, the policies don't mention X" is
+a refusal; "No, the policy says X isn't allowed" is an answer.** All 16
+became refusals. No answer has been labeled directly by a human yet.
+
+**Blind-v4: the hybrid's honest number is 22/35.** Qwen3.8-27B answered 24
+new questions in two new prompt styles, bullets and formal, for 48 answers
+in all. The API rate limit cost 7 answers, and 6 more were held back because
+their second label failed, which leaves 35 with two labels. Both labels and the dispute rule were fixed before any
+scorer ran. Each method was scored once:
+
+| Method | Blind-v4 (35 answers, 23 refusals) |
+|---|---|
+| Regex v4 | 16/35 · P 0.83 · R 0.22 [0.10–0.42] |
+| Regex v5 | 18/35 · P 0.88 · R 0.30 [0.16–0.51] |
+| LLM judge | 20/35 · P 1.00 · R 0.35 [0.19–0.55] |
+| Hybrid | 22/35 · P 0.92 · R 0.48 [0.29–0.67] |
+
+Brackets are Wilson 95% intervals. The hybrid is the best of the four, but it
+still misses half the refusals. All 12 misses have the disputed shape: a
+leading "No", then "the policies don't mention X", then related facts with
+numbers ("The only home-office reimbursements are $500 … [expense_policy.md]").
+The regex reads the numbers as an answer. The judge reads "No" as an answer,
+even though its prompt says a "no" counts only when a rule says so.
+
+What this shows:
+
+- **Recall dropped mainly because of the definition, not the wording.** The
+  two labeler models split on exactly these answers, and so does the judge.
+  A scorer can't match labels that are themselves inconsistent, so the rule
+  had to be fixed first. It now is, and blind-v4 is the first set scored
+  against it.
+- **The small sets gave false comfort.** With only 11–13 refusals in a set,
+  even a perfect recall of 1.00 has an interval of 0.74–1.00. Blind-v4 has 23
+  refusals: better, but still short of the 30 per round planned.
+- **Per style, across all sets:** the hybrid gets R 0.94–1.00 on the neutral,
+  brief and hand-written styles, 0.77 on structured, 0.50 on bullets and 0.44
+  on formal. The styles it was tuned on look solved; the new ones don't. Only
+  the blind-v4 styles are truly held out, so they are the honest
+  leave-one-style-out numbers.
+- **One possible label inconsistency.** The bullets answer "No, the company
+  does not reimburse personal mobile phone bills" was labeled an answer by
+  both models, while the formal answer to the same question was resolved as a
+  refusal. It's left as labeled, because labels aren't changed after a set is
+  scored.
+
+Run the check with
+`python -m evalkit.scorer_check --methods regex-v4,regex-v5,judge,hybrid --by-style --errors`.
+`--pending FILE.csv` writes any unresolved disputes out for a human. CI
+requires an exact match on dev and blind-v2, and at least 0.9 precision and
+recall on held-out and blind-v1. It records blind-v3 at its measured level
+(precision ≥ 0.75, recall ≥ 0.45), so a regression shows up.
 
 Limits of this check:
 
@@ -327,12 +406,11 @@ tests/fixtures/       hand-labeled answers for scorer validation
 - **Judge validation:** the abstention scorer is now checked against hand
   labels. Do the same for the LLM judge: hand-grade 20 or more answers and
   report how often its correctness and faithfulness scores agree.
-- **Replace pattern-matching for abstention.** Three blind rounds show that
-  each new prompt style beats the current patterns. Try an LLM-judge
-  abstention check, measured on the 134 labels already collected, then on a
-  fresh blind-v4. Keep the regex as a cheap first pass, if it still helps. Longer term, an LLM-judge abstention check,
-  validated against these 100+ labels, may generalise better than adding more
-  patterns.
+- **Abstention scoring, round 5.** Blind-v4 is now tuning data. Next: give
+  the judge the "No, not mentioned = refuse" rule with a worked example, check
+  the agent's declared status on a live run, and build blind-v5 from a new
+  model and style, with at least 30 refusals. Have a human label a sample of
+  the rule-resolved disputes.
 - **Repeated runs** (`repeats: 3`) to report variance, not single numbers.
 
 ## License
