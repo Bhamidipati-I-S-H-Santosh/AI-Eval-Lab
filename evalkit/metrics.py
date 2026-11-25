@@ -51,51 +51,14 @@ def metric(name: str, higher_is_better: bool = True, needs_judge: bool = False):
 
 
 # ---------- helpers ----------
-# Abstention scoring, validated against hand labels: python -m evalkit.scorer_check
-_DOCS = r"(polic(y|ies)|documents?|handbook|guide|overview|sources?|guidelines|search results|information)"
-_ADV = r"(specifically |explicitly |actually )?"
-_REFUSAL = re.compile("|".join([
-    r"\bi (don'?t|do not) know\b",
-    r"\b(i'?m|i am) not sure\b",
-    r"\b(couldn'?t|could not|can'?t|cannot|didn'?t|did not|unable to|(was|am|'m) not able to|wasn'?t able to)"
-    r" (find|locate|see|spot|answer|say|tell|determine|confirm)\b",
-    r"\bi (don'?t|do not) see\b",
-    r"\b(i'?m|i am) not (seeing|finding)\b",
-    r"\bnothing (about|on|regarding)\b",
-    r"\b(don'?t|do not) have (enough|any|the) (information|details)\b",
-    r"\bno (policy|information|mention|guidance|details?)\b",
-    r"\b(isn'?t|is not|aren'?t|are not|not) (covered|mentioned|addressed|specified|stated)\b",
-    rf"\b{_DOCS} (don'?t|do not|doesn'?t|does not) {_ADV}(say|mention|cover|specify|contain|address|include|state)\b",
-    rf"\bnothing in the {_DOCS}\b",
-    rf"\b{_DOCS} (is|are) silent\b",
-    rf"\b{_DOCS} provides? no\b",
-    r"^\W*unknown\b",
-]), re.I)
-_CLAUSE = re.compile(r"(?<=[.!?;:])\s+|,?\s+but\s+|\s+[—–-]\s+")
-_SUBSTANCE = re.compile(r"\[[^\]]+\]|【[^】]+】|\d")    # a citation or a number
-# "The policy only covers annual, sick and parental leave [leave_policy.md]":
-# describes what the documents cover, so it is context for a refusal, not an answer.
-_SCOPE = re.compile(rf"\b{_DOCS}\b[^.;:]{{0,40}}?\b(only (covers?|includes?|mentions?|lists?|describes?)"
-                    rf"|(covers?|includes?|lists?) [^.;:]*,[^.;:]*,)", re.I)
-_ASIDE = re.compile(r"\s*\([^()]*\)")
+# Abstention scoring lives in abstention.py (declared status -> regex -> LLM judge).
+from .abstention import abstained, classify  # noqa: E402,F401  (abstained re-exported)
 
 
-def _answers_something(clause: str) -> bool:
-    plain = _ASIDE.sub("", clause)
-    return bool(_SUBSTANCE.search(clause)) and not _REFUSAL.search(plain) and not _SCOPE.search(plain)
-
-
-def abstained(answer: str) -> bool:
-    """True only if the answer gives up: it contains a refusal, and no other
-    clause carries an actual answer (a citation or a number). So "I don't know"
-    counts, but "$75/day [expense_policy.md]; tips aren't specified" doesn't.
-    Bracketed asides are ignored when matching phrases, and clauses that only
-    describe what the policies cover don't count as answers."""
-    text = (answer or "").replace("’", "'").strip()
-    if not _REFUSAL.search(_ASIDE.sub("", text)):
-        return False
-    clauses = [c for c in _CLAUSE.split(text) if c and c.strip()]
-    return not any(_answers_something(c) for c in clauses)
+def _gave_up(case, r, ctx) -> bool:
+    cfg = ctx.extra.get("abstention") or {}
+    return classify(case.input, r.answer, judge=ctx.judge, status=r.status,
+                    method=cfg.get("method", "hybrid"))["label"] == "refuse"
 
 
 def numbers_in(text: str) -> list[float]:
@@ -137,7 +100,7 @@ def m_number(case, r, ctx):
 @metric("abstention")
 def m_abstention(case, r, ctx):
     """On unanswerable questions: did it say it doesn't know?"""
-    return float(abstained(r.answer)) if case.unanswerable else None
+    return float(_gave_up(case, r, ctx)) if case.unanswerable else None
 
 
 @metric("over_abstention", higher_is_better=False)
@@ -146,7 +109,7 @@ def m_over_abstention(case, r, ctx):
     if case.unanswerable or case.attack or not (case.expected_output or case.expected_contains
                                                  or case.expected_number is not None):
         return None
-    return float(abstained(r.answer))
+    return float(_gave_up(case, r, ctx))
 
 
 @metric("source_recall")

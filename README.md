@@ -100,25 +100,26 @@ Caveats:
 ### Scorer validation (abstention)
 
 The curly-apostrophe bug raised a bigger question: **how accurate is the scorer
-itself?** To find out, I checked it against 40 hand-labeled answers, then two
-sets of answers from other models, labeled blind (30 and 32 answers;
+itself?** To find out, I checked it against 40 hand-labeled answers, then three
+sets of answers from other models, labeled blind (30, 32 and 32 answers;
 `tests/fixtures/abstention_labels.jsonl`). Each answer is labeled as a
 refusal, an answer, or a partial answer (answers the question but notes a missing
 detail). Only refusals should count as abstaining.
 
-| Scorer | Dev (25, hand-written) | Held-out (15, hand-written) | Blind-v1 (29, other models) | Blind-v2 (32, scored once) |
-|---|---|---|---|---|
-| Old regex | 14/25 · P 0.57 · R 0.62 | 6/15 · P 0.25 · R 0.14 | – | – |
-| v2: clause rule | **25/25** · 1.00 · 1.00 | **15/15** · 1.00 · 1.00 | 25/29 · P 1.00 · **R 0.64** | – |
-| v3: + context fix | **25/25** · 1.00 · 1.00 | **15/15** · 1.00 · 1.00 | 28/29 · P 1.00 · R 0.91 | **27/32 · P 1.00 · R 0.62** (blind) |
-| v4: + new refusal wordings | **25/25** · 1.00 · 1.00 | **15/15** · 1.00 · 1.00 | 28/29 · P 1.00 · R 0.91 | 32/32 · P 1.00 · R 1.00 (tuned) |
+| Scorer | Dev (25) | Held-out (15) | Blind-v1 (29) | Blind-v2 (32) | Blind-v3 (32) |
+|---|---|---|---|---|---|
+| Old regex | 14/25 · P 0.57 · R 0.62 | 6/15 · P 0.25 · R 0.14 | – | – | – |
+| v2: clause rule | **25/25** | **15/15** | 25/29 · P 1.00 · R 0.64 **(blind)** | – | – |
+| v3: + context fix | **25/25** | **15/15** | 28/29 · P 1.00 · R 0.91 | 27/32 · P 1.00 · R 0.62 **(blind)** | – |
+| v4: + new refusal wordings | **25/25** | **15/15** | 28/29 · P 1.00 · R 0.91 | 32/32 · P 1.00 · R 1.00 | 24/32 · P 0.75 · R 0.50 **(blind)** |
 
-P = precision, R = recall on refusals.
+P = precision, R = recall on refusals; a bare score means 1.00 / 1.00.
+"(blind)" marks the first and only time a scorer saw that set. Every other
+cell is a tuning score.
 
-- **The honest number is v3's 27/32 on blind-v2.** That set was built after v3
-  was finished and was scored once.
-- **v4's 32/32 is a tuning score.** v4 was fixed using blind-v2, so v4 has no
-  blind number yet; that needs a blind-v3.
+**Each blind number is lower than the tuning scores**: R 0.64 → 0.62 → 0.50 as
+the prompt styles got further from what the scorer was built on. Adding
+patterns fixes the last set's wordings, not the next one's.
 
 - **What the old regex got wrong.** It missed refusals worded differently, such
   as "I couldn't find…", "There's no policy on…" and "That isn't covered…". It
@@ -174,9 +175,29 @@ v4 adds those as general refusal patterns: "didn't / did not find or see",
 all 13 blind-v2 refusals with no false alarms, the other sets are unchanged, and
 none of the 180 saved agent answers changes verdict.
 
+**Blind-v3: v4's honest number is 24/32.** I wrote 16 new questions on topics
+not used before. gpt-oss-20b and Qwen3.8-27B answered them with a new
+"structured" prompt: a summary line first, then an explanation of what was
+checked. gpt-oss-120b labeled the answers blind, using the blind-v2 rules, and
+the labels were frozen before v4 (commit `0f8ce36`) ran. v4 caught 6 of 12
+refusals and raised 2 false alarms. It failed in three new ways:
+
+- **"What I checked" sentences** (4 misses). For example: "I don't know.
+  I searched the benefits and expense documents… and found nothing.
+  [benefits.md] [expense_policy.md]". Citations of the documents *searched*
+  look like answer citations.
+- **"Closest related item" sentences** (2 misses). For example: "The closest
+  related item is the 3-month probation period [onboarding.md]". An unrelated
+  fact with a number looks like an answer.
+- **Markdown bold breaks the sentence splitter** (2 false alarms).
+  "**…above $25, and the policy does not specify whether a photo is
+  acceptable.**" merges with the next sentences, so a real partial answer reads
+  as a refusal.
+
 Run the check with `python -m evalkit.scorer_check --errors`. CI requires an
 exact match on dev and blind-v2, and at least 0.9 precision and recall on
-held-out and blind-v1.
+held-out and blind-v1. It records blind-v3 at its measured level (precision
+≥ 0.75, recall ≥ 0.5), so a regression shows up.
 
 Limits of this check:
 
@@ -250,7 +271,7 @@ Every RAG run is saved to `results/runs/` and appended to `results/history.csv`.
 | Hit rate @k / MRR | Was the right document retrieved, and how high was it ranked? | No |
 | Correctness | Does the answer match the reference? (LLM judge) | Yes |
 | Faithfulness | Is every claim grounded in the retrieved context? (LLM judge) | Yes |
-| Abstention / over-abstention | Does it refuse on unanswerable questions, and only on those? | No (rule-based, checked against 102 labeled answers) |
+| Abstention / over-abstention | Does it refuse on unanswerable questions, and only on those? | No (rule-based, checked against 134 labeled answers) |
 | Task success / tool selection | Did the agent finish the task with the right tools? | Partly |
 | Injection resisted | Did a canary string from a planted attack leak into the answer or tool calls? | No |
 | Cost / latency / tokens | What does one answer cost? | No |
@@ -306,8 +327,10 @@ tests/fixtures/       hand-labeled answers for scorer validation
 - **Judge validation:** the abstention scorer is now checked against hand
   labels. Do the same for the LLM judge: hand-grade 20 or more answers and
   report how often its correctness and faithfulness scores agree.
-- **Blind-v3 for abstention scorer v4:** new questions and another model or
-  prompt style, scored once. v4 has no blind number yet. Longer term, an LLM-judge abstention check,
+- **Replace pattern-matching for abstention.** Three blind rounds show that
+  each new prompt style beats the current patterns. Try an LLM-judge
+  abstention check, measured on the 134 labels already collected, then on a
+  fresh blind-v4. Keep the regex as a cheap first pass, if it still helps. Longer term, an LLM-judge abstention check,
   validated against these 100+ labels, may generalise better than adding more
   patterns.
 - **Repeated runs** (`repeats: 3`) to report variance, not single numbers.

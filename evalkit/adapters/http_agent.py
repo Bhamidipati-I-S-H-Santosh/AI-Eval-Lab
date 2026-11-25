@@ -12,6 +12,7 @@ config:
   retrieved_field: debug.sources                        # optional
   retrieved_map: { id: doc_id, text: content }          # optional key names
   usage_fields: { prompt_tokens: usage.input_tokens, completion_tokens: usage.output_tokens }
+  status_field: status          # optional: agent's own "answered" | "partial" | "unanswerable"
   timeout: 60
   retries: 2
 """
@@ -32,7 +33,9 @@ class HttpAgentAdapter(AgentAdapter):
                  request: dict | str | None = None, answer_field: str = "answer",
                  trace_field: str | None = None, trace_map: dict | None = None,
                  retrieved_field: str | None = None, retrieved_map: dict | None = None,
-                 usage_fields: dict | None = None, timeout: float = 60, retries: int = 2, **_):
+                 usage_fields: dict | None = None, status_field: str | None = None,
+                 timeout: float = 60, retries: int = 2, **_):
+        self.status_field = status_field
         self.url = expand_env(url)
         self.method = method.upper()
         self.headers = expand_env(headers or {})
@@ -86,6 +89,7 @@ class HttpAgentAdapter(AgentAdapter):
             trace=trace, retrieved=retrieved,
             prompt_tokens=get_path(data, self.usage_fields.get("prompt_tokens")),
             completion_tokens=get_path(data, self.usage_fields.get("completion_tokens")),
+            status=get_path(data, self.status_field) if self.status_field else None,
             latency_s=round(time.time() - t0, 3), raw=data)
 
     def close(self):

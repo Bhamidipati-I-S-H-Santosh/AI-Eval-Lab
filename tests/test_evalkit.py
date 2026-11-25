@@ -279,3 +279,62 @@ def test_abstention_scorer_blind_v2_labels():
     # refusal wordings it missed, so this is now tuning data (32/32).
     s = _split("blind-v2")
     assert s["n"] == 32 and not s["wrong"], s["wrong"]
+
+
+def test_abstention_scorer_blind_v3_labels():
+    # Blind number for scorer v4 (commit 0f8ce36): gpt-oss-20b + Qwen3.8-27B with a
+    # 'structured' prompt, labeled blind by gpt-oss-120b, frozen before scoring.
+    # Scored once, NOT tuned on: records the measured 24/32 (P 0.75, R 0.50).
+    s = _split("blind-v3")
+    assert s["n"] == 32 and s["precision"] >= 0.75 and s["recall"] >= 0.5, s
+
+
+# ---------- abstention: declared status, regex v5, LLM judge ----------
+class _FakeJudge:
+    def __init__(self, label): self.label, self.calls = label, 0
+    def complete(self, prompt, system=None, use_cache=True):
+        self.calls += 1
+        return '{"label": "%s"}' % self.label
+
+
+def test_declared_status_wins_over_text():
+    from evalkit.abstention import classify
+    assert classify("q", "Here is a long answer [a.md] $5", status="unanswerable") == {"label": "refuse", "method": "status"}
+    assert classify("q", "I don't know.", status="answered")["label"] == "answer"
+
+
+def test_regex_v5_markdown_and_context_sentences():
+    from evalkit.abstention import regex_verdict, strip_markdown
+    assert "**" not in strip_markdown("**Receipts above $25.** More.")
+    # citing the documents it searched is context, not an answer
+    assert regex_verdict("I don't know. I searched the benefits documents and found nothing. [benefits.md]") == "refuse"
+    # lead sentence answers -> not a refusal
+    assert regex_verdict("**Receipts are needed above $25 [expense_policy.md].** The policy doesn't say if photos are OK.") == "answer"
+    # refusal first, then an answer-like fact -> unsure, ask the judge
+    assert regex_verdict("I don't know. Hotels are capped at $320 per night [expense_policy.md].") == "uncertain"
+
+
+def test_hybrid_only_calls_judge_when_regex_is_unsure():
+    from evalkit.abstention import classify
+    j = _FakeJudge("refuse")
+    assert classify("q", "I don't know.", judge=j)["method"] == "regex" and j.calls == 0
+    out = classify("q", "I don't know. Hotels are capped at $320 per night [expense_policy.md].", judge=j)
+    assert out == {"label": "refuse", "method": "judge"} and j.calls == 1
+
+
+def test_abstention_metric_reads_declared_status():
+    c = TestCase(id="x", input="q", unanswerable=True)
+    assert M.m_abstention(c, AgentResult(answer="A long answer [a.md] 5", status="unanswerable"), ctx()) == 1.0
+
+
+def test_agent_status_line_is_parsed_and_removed():
+    from src.agent import split_status
+    assert split_status("You get 24 days [leave_policy.md].\n\nStatus: answered") == ("You get 24 days [leave_policy.md].", "answered")
+    assert split_status("I don't know.\n**Status:** unanswerable") == ("I don't know.", "unanswerable")
+    assert split_status("No status here.") == ("No status here.", None)
+
+
+def test_wilson_interval_is_wide_for_small_counts():
+    from evalkit.scorer_check import wilson
+    lo, hi = wilson(6, 12)
+    assert 0.2 < lo < 0.3 and 0.7 < hi < 0.8

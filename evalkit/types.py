@@ -31,6 +31,7 @@ class AgentResult:
     completion_tokens: int | None = None
     latency_s: float | None = None
     error: str | None = None
+    status: str | None = None  # optional self-declared: "answered" | "partial" | "unanswerable"
     raw: Any = None  # the untouched response, for debugging
 
     @property

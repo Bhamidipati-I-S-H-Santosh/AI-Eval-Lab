@@ -28,7 +28,7 @@ def to_agent_result(out: Any) -> AgentResult:
                 id=str(r.get("id", "")), text=r.get("text", ""), score=r.get("score"),
                 metadata=r.get("metadata") or {}) for r in out.get("retrieved") or []],
             prompt_tokens=out.get("prompt_tokens"), completion_tokens=out.get("completion_tokens"),
-            raw=out)
+            status=out.get("status"), raw=out)
     raise TypeError(f"can't convert {type(out).__name__} to AgentResult")
 
 

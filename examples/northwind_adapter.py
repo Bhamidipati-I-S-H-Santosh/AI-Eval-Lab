@@ -27,7 +27,7 @@ def run(question: str) -> dict:
                                       "metadata": {"section": item.get("section")}})
             except (json.JSONDecodeError, KeyError, TypeError):
                 pass
-    return {"answer": r.answer,
+    return {"answer": r.answer, "status": r.status,
             "trace": [{"tool": s.tool, "args": s.args, "result": s.result} for s in r.steps],
             "retrieved": retrieved,
             "prompt_tokens": r.prompt_tokens, "completion_tokens": r.completion_tokens}
