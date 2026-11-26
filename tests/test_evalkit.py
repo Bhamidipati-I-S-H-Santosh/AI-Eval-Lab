@@ -99,7 +99,12 @@ def test_http_adapter_maps_fields():
 
 
 def test_qdrant_adapter_in_memory():
-    from qdrant_client import QdrantClient
+    try:
+        from qdrant_client import QdrantClient
+    except ImportError as e:
+        # qdrant_client imports grpc's native DLL, which some machines block
+        # (e.g. Windows Application Control). Not a bug in the adapter.
+        pytest.skip(f"qdrant_client unavailable here: {e}")
     sys.path.insert(0, str(ROOT / "examples"))
     from load_qdrant import load
     client = QdrantClient(location=":memory:")
@@ -318,12 +323,59 @@ def test_regex_v5_markdown_and_context_sentences():
     assert regex_verdict("I don't know. Hotels are capped at $320 per night [expense_policy.md].") == "uncertain"
 
 
+def test_regex_v6_skips_empty_openers_and_related_facts():
+    from evalkit.abstention import regex_verdict_v6 as v6
+    # "- No" / "Based on the available policy documents, **no**" carry no signal:
+    # the refusal after them is the lead, so the related $60 fact doesn't make it an answer
+    assert v6("- No — the policies don't mention a glasses stipend.\n"
+              "- The only wellness benefit is $60/month for a gym [benefits.md].") == "refuse"
+    assert v6("Based on the policies, **no**. The policies are silent on this. "
+              "The internet allowance is $40/month [expense_policy.md].") == "uncertain"
+    # an answer, then a missing detail in the same sentence -> partial, not a refusal
+    assert v6("The allowance is $500 one-time plus $40/month for internet—printers are not covered "
+              "[expense_policy.md].") == "answer"
+    # a negation about a rule, not about the documents, is still an answer
+    assert v6("Travel insurance does not cover personal trips [expense_policy.md].") == "answer"
+
+
 def test_hybrid_only_calls_judge_when_regex_is_unsure():
     from evalkit.abstention import classify
     j = _FakeJudge("refuse")
-    assert classify("q", "I don't know.", judge=j)["method"] == "regex" and j.calls == 0
-    out = classify("q", "I don't know. Hotels are capped at $320 per night [expense_policy.md].", judge=j)
+    assert classify("q", "I don't know.", judge=j, method="hybrid")["method"] == "regex" and j.calls == 0
+    out = classify("q", "I don't know. Hotels are capped at $320 per night [expense_policy.md].", judge=j, method="hybrid")
     assert out == {"label": "refuse", "method": "judge"} and j.calls == 1
+
+
+def test_judge_refuse_needs_an_admitted_gap():
+    from evalkit.abstention import admits_gap, classify
+    j = _FakeJudge("refuse")
+    # a pasted document dump or a crash message doesn't answer, but isn't an honest refusal
+    dump = "According to benefits.md: # Northwind Labs - Benefits Overview ## Learning budget Every employee..."
+    assert classify("When does the match vest?", dump, judge=j) == {"label": "answer", "method": "judge+guard"}
+    assert classify("q", "I couldn't finish within the step limit.", judge=j)["label"] == "answer"
+    # any wording that admits the gap keeps the judge's refusal
+    for a in ["The benefits doc doesn’t actually mention health insurance.",
+              "No on-site gym mentioned in the policies.", "I don't know."]:
+        assert admits_gap(a) and classify("q", a, judge=j)["label"] == "refuse", a
+
+
+def test_labeled_refusals_all_admit_the_gap():
+    from evalkit.abstention import admits_gap
+    from evalkit.scorer_check import final_label, load
+    missing = [r["answer"][:80] for r in load() if final_label(r) == "refuse" and not admits_gap(r["answer"])]
+    assert not missing, missing
+
+
+def test_default_is_judge_first_and_falls_back_to_regex():
+    from evalkit.abstention import classify
+
+    class _Down:
+        def complete(self, *a, **k):
+            raise RuntimeError("429 rate limit")
+    j = _FakeJudge("answer")
+    assert classify("q", "I don't know.", judge=j) == {"label": "answer", "method": "judge"} and j.calls == 1
+    assert classify("q", "I don't know.", judge=_Down()) == {"label": "refuse", "method": "regex"}
+    assert classify("q", "I don't know.")["method"] == "regex"
 
 
 def test_abstention_metric_reads_declared_status():

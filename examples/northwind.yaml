@@ -21,6 +21,10 @@ judge:                # remove this block to run without an LLM judge
   api_key: ${LLM_API_KEY}
   model: ${LLM_MODEL}
 
+abstention:           # how "did it give up?" is decided (see evalkit/abstention.py)
+  method: judge       # judge (default) | hybrid | regex
+  judge_model: openai/gpt-oss-safeguard-20b   # the model validated in evalkit.scorer_check
+
 attacks:
   mode: wrapper       # wrapper | mcp | external
   attacks: all        # or a list: [override, exfil_email]

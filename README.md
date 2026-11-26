@@ -100,8 +100,8 @@ Caveats:
 ### Scorer validation (abstention)
 
 The curly-apostrophe bug raised a bigger question: **how accurate is the scorer
-itself?** To find out, I checked it against 40 hand-labeled answers, then four
-sets of answers from other models, labeled blind (30, 32, 32 and 35 answers;
+itself?** To find out, I checked it against 40 hand-labeled answers, then five
+sets of answers from other models, labeled blind (30, 32, 32, 35 and 66 answers;
 `tests/fixtures/abstention_labels.jsonl`). Each answer is labeled as a
 refusal, an answer, or a partial answer (answers the question but notes a missing
 detail). Only refusals should count as abstaining.
@@ -271,12 +271,101 @@ What this shows:
   refusal. It's left as labeled, because labels aren't changed after a set is
   scored.
 
+**Round 5: fix the judge, not the patterns.** Blind-v4 showed the problem was
+the judge reading "No, the policies don't mention X" as an answer. Three changes
+were made using only dev through blind-v4, before blind-v5 existed:
+
+- **Judge prompt v2** (`JUDGE_PROMPT`; v1 is kept as `JUDGE_PROMPT_V1`). It
+  states the rule in full, including "still a refusal if it starts with No,
+  says the company doesn't offer X only because nothing was found, or lists
+  related benefits". It adds four worked examples on invented topics that
+  appear in no labeled set.
+- **Judge model: gpt-oss-safeguard-20b.** It's built to classify text against
+  a written policy, and it wrote and labeled none of the answers. On the 168
+  earlier labels it beat gpt-oss-20b: 161/168 vs 150/168 inside the hybrid.
+- **Regex v6.** The lead sentence is now the first one that says something,
+  so "- No" or "Based on the available policies, **no**" no longer decides
+  the verdict. "The only wellness benefit is $60/month" counts as context, and
+  "…$40/month for internet—printers aren't covered" splits into two clauses.
+
+The labelers also got the rule written into their prompt. Disagreement fell
+from 13 of 35 answers on blind-v4 to 2 of 66 on blind-v5.
+
+**Blind-v5: the honest number is 63/66, recall 0.93.** There were 22 new
+questions: 15 with no answer in the policies, 4 answerable and 3 partly
+answerable. Qwen3.8-27B answered them in two new styles, "casual" (team-chat
+tone) and "terse" (two sentences at most), and gpt-oss-120b in the terse
+style. That gives 66 answers, 44 of them refusals. gpt-oss-120b and Qwen
+labeled every answer, the 2 disputes were resolved with the rule, and the set
+was frozen before any scorer ran. Each method was scored once:
+
+| Method | Blind-v5 (66 answers, 44 refusals) | All 234 labels (mostly tuning) |
+|---|---|---|
+| Regex v4 | 43/66 · P 1.00 · R 0.48 [0.34–0.62] | 182/234 · P 0.96 · R 0.60 |
+| Regex v5 | 44/66 · P 0.92 · R 0.55 [0.40–0.68] | 187/234 · P 0.92 · R 0.68 |
+| Regex v6 | 50/66 · P 0.94 · R 0.68 [0.53–0.80] | 198/234 · P 0.95 · R 0.75 |
+| Old judge (gpt-oss-20b, prompt v1) | 48/66 · P 1.00 · R 0.59 [0.44–0.72] | 180/234 · P 0.97 · R 0.58 |
+| Old hybrid (regex v5 + old judge) | 51/66 · P 0.94 · R 0.70 [0.56–0.82] | 199/234 · P 0.94 · R 0.77 |
+| Hybrid (regex v6 + new judge) | 59/66 · P 0.95 · R 0.89 [0.76–0.95] | 221/234 · P 0.94 · R 0.95 |
+| **Judge only (safeguard-20b, prompt v2)** | **63/66 · P 1.00 · R 0.93 [0.82–0.98]** | 225/234 · P 0.96 · R 0.97 |
+
+Brackets are Wilson 95% intervals, now much tighter because there are 44
+refusals instead of 11–13.
+
+- **Recall went from 0.70 to 0.93 on unseen data**, comparing the old hybrid
+  with the new judge on the same blind set, and precision stayed at 1.00.
+  Both new styles scored about the same (casual R 0.93, terse R 0.93), so the
+  judge isn't tied to one way of writing.
+- **The regex is now the weak part.** The new hybrid loses 4 answers to the
+  judge alone, all cases where the regex was confident and wrong, such as "No
+  on-site gym mentioned in the policies — but the company does cover up to
+  $60/month…". So **the default is now judge-first**
+  (`classify(..., method="judge")`). The regex runs only when there is no
+  judge or the judge call fails, and the result's `method` field says which
+  one decided. This choice was made *after* seeing blind-v5, so it needs a
+  blind-v6 to confirm it. On the 168 earlier labels the two tied (161/168
+  each), so blind-v5 is the only evidence that judge-first is better.
+- **The judge's 3 misses** are the 2 answers whose labels were disputed and
+  resolved by the rule, plus one near-copy of them ("…no paid time off for
+  moving house. You could use your annual leave"). They're the borderline
+  cases where reasonable labelers differ.
+- **A guard against false refusals.** Re-scoring the saved agent runs with
+  the judge changed 11 verdicts, and all 11 were wrong. Nine came from the
+  example HTTP chatbot pasting raw document text ("According to
+  benefits.md: # Northwind Labs — Benefits…"), and two were the crash message
+  "I couldn't finish within the step limit." The judge called these refusals
+  because they don't answer the question. But abstention means *admitting* the
+  gap, and counting these would credit a broken bot with honest "I don't
+  know"s. So a judge "refuse" now counts only if the reply admits the gap in
+  some wording (`admits_gap`); otherwise the method is `judge+guard` and it is
+  not counted as abstaining. All 124 labeled refusals pass the guard (a CI
+  test checks this), and none of the 25 dumps and crash messages do. With the
+  guard, none of the 102 saved agent answers changes verdict, so the reported
+  agent results stand, and the dev set's one judge error is fixed. Blind-v5 is
+  unchanged, because the guard never blocks a real refusal. It was added after
+  blind-v5 was scored.
+- **Cost:** judge-first means one judge call per scored answer (cached on
+  disk). Set `abstention: {method: hybrid}` to call the judge only on the
+  ~20% of answers the regex is unsure about, or `method: regex` for no API
+  calls.
+
+Configure it in the eval YAML:
+
+```yaml
+abstention:
+  method: judge                                # judge (default) | hybrid | regex
+  judge_model: openai/gpt-oss-safeguard-20b    # same endpoint as `judge`, validated model
+```
+
 Run the check with
-`python -m evalkit.scorer_check --methods regex-v4,regex-v5,judge,hybrid --by-style --errors`.
-`--pending FILE.csv` writes any unresolved disputes out for a human. CI
-requires an exact match on dev and blind-v2, and at least 0.9 precision and
-recall on held-out and blind-v1. It records blind-v3 at its measured level
-(precision ≥ 0.75, recall ≥ 0.45), so a regression shows up.
+`python -m evalkit.scorer_check --methods regex-v6,judge,hybrid --by-style --errors`
+(`--judge-prompt v1` and `--judge-model` reproduce the older judges;
+`--pending FILE.csv` writes any unresolved disputes out for a human). CI runs
+without an API key, so it checks the regex fallback (an exact match on dev and
+blind-v2, at least 0.9 precision and recall on held-out and blind-v1, and
+blind-v3 at its measured level: precision ≥ 0.75, recall ≥ 0.45), the guard
+(every labeled refusal must pass it), and the judge-first and fallback logic
+with a fake judge.
 
 Limits of this check:
 
@@ -406,11 +495,11 @@ tests/fixtures/       hand-labeled answers for scorer validation
 - **Judge validation:** the abstention scorer is now checked against hand
   labels. Do the same for the LLM judge: hand-grade 20 or more answers and
   report how often its correctness and faithfulness scores agree.
-- **Abstention scoring, round 5.** Blind-v4 is now tuning data. Next: give
-  the judge the "No, not mentioned = refuse" rule with a worked example, check
-  the agent's declared status on a live run, and build blind-v5 from a new
-  model and style, with at least 30 refusals. Have a human label a sample of
-  the rule-resolved disputes.
+- **Abstention scoring, round 6.** Blind-v5 is now tuning data. Next:
+  confirm the judge-first default on a blind-v6 from a model family not used
+  yet; check the agent's declared `Status:` line on a live run; and have a
+  human label a sample of the 18 rule-resolved disputes, since those are
+  exactly the cases where the scorer and the labelers disagree.
 - **Repeated runs** (`repeats: 3`) to report variance, not single numbers.
 
 ## License

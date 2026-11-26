@@ -127,7 +127,7 @@ def score_rows(rows, cases, cfg, judge) -> list[dict]:
     cost = cfg.get("cost", {})
     ctx = M.Context(judge=judge, price_in_per_1m=cost.get("input_per_1m", 0.0),
                     price_out_per_1m=cost.get("output_per_1m", 0.0),
-                    extra={"abstention": cfg.get("abstention") or {}})   # {method: hybrid|judge|regex}
+                    extra={"abstention": cfg.get("abstention") or {}})   # {method: judge|hybrid|regex, judge_model}
     names = cfg.get("metrics") or (["task_success"] + list(M.REGISTRY))
     unknown = [n for n in names if n != "task_success" and n not in M.REGISTRY]
     if unknown:

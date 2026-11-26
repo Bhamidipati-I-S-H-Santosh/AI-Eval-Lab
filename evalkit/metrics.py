@@ -55,10 +55,27 @@ def metric(name: str, higher_is_better: bool = True, needs_judge: bool = False):
 from .abstention import abstained, classify  # noqa: E402,F401  (abstained re-exported)
 
 
+_ABST_JUDGES: dict = {}
+
+
+def _abstention_judge(ctx, cfg):
+    """The general judge, or (abstention.judge_model) a judge on the same endpoint
+    with the model the abstention check was validated on."""
+    model = cfg.get("judge_model")
+    if not model or ctx.judge is None or ctx.judge.model == model:
+        return ctx.judge
+    if model not in _ABST_JUDGES:
+        from .judge import Judge
+        j = ctx.judge
+        _ABST_JUDGES[model] = Judge(model=model, base_url=str(j.client.base_url), api_key=j.client.api_key,
+                                    cache_dir=str(j.cache_dir), retries=max(j.retries, 5))
+    return _ABST_JUDGES[model]
+
+
 def _gave_up(case, r, ctx) -> bool:
     cfg = ctx.extra.get("abstention") or {}
-    return classify(case.input, r.answer, judge=ctx.judge, status=r.status,
-                    method=cfg.get("method", "hybrid"))["label"] == "refuse"
+    return classify(case.input, r.answer, judge=_abstention_judge(ctx, cfg), status=r.status,
+                    method=cfg.get("method", "judge"))["label"] == "refuse"
 
 
 def numbers_in(text: str) -> list[float]:

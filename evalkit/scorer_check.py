@@ -1,8 +1,10 @@
 """Check the abstention scorer against labeled answers.
 
-    python -m evalkit.scorer_check                     # regex v4, per split
+    python -m evalkit.scorer_check                     # regex v6 (no API), per split
+    python -m evalkit.scorer_check --methods judge     # the default scorer (needs an API key)
     python -m evalkit.scorer_check --errors            # also list disagreements
-    python -m evalkit.scorer_check --methods regex-v4,regex-v5,judge,hybrid --by-style
+    python -m evalkit.scorer_check --methods regex-v4,regex-v6,judge,hybrid --by-style
+    python -m evalkit.scorer_check --methods hybrid --judge-prompt v1   # the original judge prompt
     python -m evalkit.scorer_check --pending out.csv   # label disputes for a human
 
 Labels (tests/fixtures/abstention_labels.jsonl):
@@ -26,10 +28,10 @@ import math
 import os
 from pathlib import Path
 
-from .abstention import abstained, classify
+from .abstention import JUDGE_PROMPT, JUDGE_PROMPT_V1, abstained, classify
 
 LABELS = Path(__file__).resolve().parent.parent / "tests" / "fixtures" / "abstention_labels.jsonl"
-METHODS = ("regex-v4", "regex-v5", "judge", "hybrid")
+METHODS = ("regex-v4", "regex-v5", "regex-v6", "judge", "hybrid-v5", "hybrid")
 
 
 def load(path: Path = LABELS) -> list[dict]:
@@ -83,13 +85,13 @@ def make_judge(model: str):
     return Judge(model=model, base_url=os.getenv("LLM_BASE_URL"), api_key=os.getenv("LLM_API_KEY"))
 
 
-def predictor(method: str, judge=None):
-    def fn(r):
-        q = r.get("question")
-        return classify(q, r["answer"], judge=judge, method=method)["label"] == "refuse"
-    if method == "regex-v5":
-        return lambda r: classify(r.get("question"), r["answer"], judge=None, method="regex")["label"] == "refuse"
-    return fn
+def predictor(method: str, judge=None, judge_prompt: str | None = None):
+    """regex-v5 / regex-v6 never call the judge; hybrid = regex v6 + judge."""
+    if method in ("regex-v5", "regex-v6"):
+        m = "regex-v5" if method == "regex-v5" else "regex"
+        return lambda r: classify(r.get("question"), r["answer"], judge=None, method=m)["label"] == "refuse"
+    return lambda r: classify(r.get("question"), r["answer"], judge=judge, method=method,
+                              judge_prompt=judge_prompt)["label"] == "refuse"
 
 
 def _fmt(s: dict) -> str:
@@ -100,8 +102,9 @@ def _fmt(s: dict) -> str:
 
 def main(argv=None) -> None:
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
-    ap.add_argument("--methods", default="regex-v4")
-    ap.add_argument("--judge-model", default=os.getenv("ABSTENTION_JUDGE_MODEL", "openai/gpt-oss-20b"))
+    ap.add_argument("--methods", default="regex-v6")
+    ap.add_argument("--judge-model", default=os.getenv("ABSTENTION_JUDGE_MODEL", "openai/gpt-oss-safeguard-20b"))
+    ap.add_argument("--judge-prompt", choices=("v1", "v2"), default="v2")
     ap.add_argument("--by-style", action="store_true")
     ap.add_argument("--errors", action="store_true")
     ap.add_argument("--pending", metavar="CSV", help="write label disputes to CSV for a human")
@@ -109,7 +112,8 @@ def main(argv=None) -> None:
     rows = load()
     methods = [m.strip() for m in a.methods.split(",") if m.strip()]
     judge = None
-    if any(m in ("judge", "hybrid") for m in methods):
+    prompt = JUDGE_PROMPT_V1 if a.judge_prompt == "v1" else JUDGE_PROMPT
+    if any(m in ("judge", "hybrid", "hybrid-v5") for m in methods):
         from dotenv import load_dotenv
         load_dotenv(LABELS.parents[2] / ".env")
         judge = make_judge(a.judge_model)
@@ -119,8 +123,9 @@ def main(argv=None) -> None:
     if a.by_style:
         keys += [f"style:{s}" for s in dict.fromkeys(style(r) for r in rows)]
     for m in methods:
-        fn = predictor(m, judge)
-        print(f"\n== {m}" + (f" (judge: {a.judge_model})" if m in ("judge", "hybrid") else ""))
+        fn = predictor(m, judge, prompt)
+        uses_judge = m in ("judge", "hybrid", "hybrid-v5")
+        print(f"\n== {m}" + (f" (judge: {a.judge_model}, prompt {a.judge_prompt})" if uses_judge else ""))
         for k in keys + ["ALL"]:
             sel = (rows if k == "ALL" else [r for r in rows if style(r) == k[6:]] if k.startswith("style:")
                    else [r for r in rows if r.get("split") == k])
