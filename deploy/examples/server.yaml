@@ -1,0 +1,38 @@
+# evalkit server configuration (python -m evalkit serve --config server.yaml).
+# Every ${...} is resolved from the environment or the secrets manager below.
+
+# Where runs, reports and received traces are stored. Pick one:
+storage:
+  type: local
+  root: /data/runs
+# storage: {type: s3, bucket: my-evals, prefix: evalkit/, region: eu-west-1}          # IAM role / IRSA
+# storage: {type: azure_blob, account_url: https://acct.blob.core.windows.net, container: evals}   # managed identity
+# storage: {type: gcs, bucket: my-evals}                                                # workload identity
+# storage: {type: postgres, dsn: "${secret:evalkit-db-dsn}"}
+
+secrets:
+  type: env
+# secrets: {type: azure_keyvault, vault_url: https://my-vault.vault.azure.net}
+# secrets: {type: aws_secrets_manager, region: eu-west-1}
+# secrets: {type: vault, url: https://vault.internal:8200, mount: secret}
+
+configs_dir: /etc/evalkit/configs     # the only eval configs the API may start
+datasets_dir: /data/datasets
+public_url: https://evalkit.corp.example
+session_secret: ${EVALKIT_SESSION_SECRET}
+max_parallel_runs: 2
+max_upload_mb: 20
+
+auth:
+  mode: oidc
+  oidc:
+    issuer: ${OIDC_ISSUER}            # e.g. https://login.microsoftonline.com/<tenant>/v2.0, https://<org>.okta.com
+    audience: ${OIDC_AUDIENCE}        # 'aud' of API bearer tokens, e.g. api://evalkit
+    client_id: ${OIDC_CLIENT_ID}      # dashboard sign-in (authorization code + PKCE)
+    client_secret: ${OIDC_CLIENT_SECRET:-}
+    roles_claim: roles                # Entra app roles; Okta/Keycloak often use 'groups'
+    role_map: {EvalAdmins: admin, EvalRunners: runner, EvalViewers: viewer}
+    default_role: viewer
+  api_keys:                           # CI pipelines and OTLP exporters (>= 16 chars, from secrets)
+    "${EVALKIT_CI_KEY}": {name: ci, roles: [runner]}
+    "${EVALKIT_INGEST_KEY}": {name: otel-collector, roles: [ingest]}

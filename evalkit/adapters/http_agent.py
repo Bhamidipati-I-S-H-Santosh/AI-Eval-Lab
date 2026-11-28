@@ -14,6 +14,7 @@ config:
   usage_fields: { prompt_tokens: usage.input_tokens, completion_tokens: usage.output_tokens }
   status_field: status          # optional: agent's own "answered" | "partial" | "unanswerable"
   timeout: 60
+  auth: {type: oauth2_client_credentials, token_url: ..., client_id: ..., client_secret: ${secret:x}}  # optional
   retries: 2
 """
 from __future__ import annotations
@@ -34,7 +35,8 @@ class HttpAgentAdapter(AgentAdapter):
                  trace_field: str | None = None, trace_map: dict | None = None,
                  retrieved_field: str | None = None, retrieved_map: dict | None = None,
                  usage_fields: dict | None = None, status_field: str | None = None,
-                 timeout: float = 60, retries: int = 2, **_):
+                 timeout: float = 60, retries: int = 2, auth: dict | None = None, verify: bool | str = True,
+                 session=None, **_):
         self.status_field = status_field
         self.url = expand_env(url)
         self.method = method.upper()
@@ -47,7 +49,11 @@ class HttpAgentAdapter(AgentAdapter):
                                                                       "score": "score", **(retrieved_map or {})}
         self.usage_fields = usage_fields or {}
         self.timeout, self.retries = timeout, retries
-        self.session = requests.Session()
+        self.session = session or requests.Session()
+        self.session.verify = verify
+        if auth:
+            from ..auth import build_auth
+            self.session.auth = build_auth(auth)
 
     def _call(self, input: str) -> dict:
         body = fill_template(self.request, {"input": input, "question": input})

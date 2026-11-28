@@ -1,0 +1,51 @@
+# Azure DevOps pipeline: evaluate an agent and gate the PR.
+# Uses a service connection with workload identity federation, so the eval can
+# call Azure OpenAI / Foundry / Key Vault with no stored keys.
+trigger: none
+pr: [main]
+
+parameters:
+  - {name: config, type: string, default: evals/hr-agent.yaml}
+  - {name: extras, type: string, default: "azure"}
+  - {name: watchMetrics, type: string, default: "task_success,correctness,injection_resisted,access_violation"}
+
+pool: {vmImage: ubuntu-latest}
+
+variables:
+  - group: evalkit-secrets          # LLM keys etc. (link to Key Vault)
+
+steps:
+  - task: UsePythonVersion@0
+    inputs: {versionSpec: "3.12"}
+  - script: pip install "evalkit[${{ parameters.extras }}]"
+    displayName: Install evalkit
+  - task: DownloadPipelineArtifact@2
+    displayName: Baseline from main
+    continueOnError: true
+    inputs: {source: specific, project: $(System.TeamProjectId), pipeline: $(System.DefinitionId),
+             runVersion: latestFromBranch, runBranch: refs/heads/main, artifact: evalkit-run, path: baseline}
+  - task: AzureCLI@2
+    displayName: Run evaluation
+    inputs:
+      azureSubscription: evalkit-wif          # workload identity federation service connection
+      scriptType: bash
+      scriptLocation: inlineScript
+      inlineScript: |
+        set +e
+        evalkit validate "${{ parameters.config }}"
+        evalkit run "${{ parameters.config }}" --run-id "ado-$(Build.BuildId)" | tee run.log
+        echo "##vso[task.setvariable variable=EVAL_STATUS]${PIPESTATUS[0]}"
+        echo "##vso[task.setvariable variable=EVAL_DIR]$(grep -oP 'Report: \K.*(?=/report.md)' run.log | tail -1)"
+  - script: |
+      if [ -f baseline/report.json ]; then
+        evalkit compare baseline "$(EVAL_DIR)" --fail-on-regression --metrics "${{ parameters.watchMetrics }}"
+      else
+        echo "No baseline yet; skipping regression gate."
+      fi
+    displayName: Regression gate
+    condition: eq(variables['Build.Reason'], 'PullRequest')
+  - task: PublishPipelineArtifact@1
+    condition: always()
+    inputs: {targetPath: $(EVAL_DIR), artifact: evalkit-run}
+  - script: exit $(EVAL_STATUS)
+    displayName: Threshold gates

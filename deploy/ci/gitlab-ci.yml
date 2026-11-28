@@ -1,0 +1,32 @@
+# GitLab CI: include from your .gitlab-ci.yml
+#   include: [{local: deploy/ci/gitlab-ci.yml}]
+#   variables: {EVALKIT_CONFIG: evals/hr-agent.yaml, EVALKIT_EXTRAS: "openai,aws"}
+variables:
+  EVALKIT_CONFIG: evals/agent.yaml
+  EVALKIT_EXTRAS: "openai"
+  EVALKIT_WATCH: "task_success,correctness,injection_resisted,access_violation"
+
+evalkit:
+  image: python:3.12-slim
+  stage: test
+  id_tokens:
+    CLOUD_ID_TOKEN: {aud: "https://gitlab.com"}     # OIDC to AWS/GCP/Azure, no stored keys
+  script:
+    - pip install "evalkit[${EVALKIT_EXTRAS}]"
+    - evalkit validate "$EVALKIT_CONFIG"
+    - set +e; evalkit run "$EVALKIT_CONFIG" --run-id "gl-${CI_PIPELINE_ID}" | tee run.log; STATUS=${PIPESTATUS[0]}; set -e
+    - RUN_DIR=$(sed -n 's/^Report: \(.*\)\/report.md$/\1/p' run.log | tail -1); mkdir -p evalkit-run && cp -r "$RUN_DIR"/. evalkit-run/
+    - |
+      if [ -n "$CI_MERGE_REQUEST_IID" ] && curl -sfL --header "JOB-TOKEN: $CI_JOB_TOKEN" -o baseline.zip \
+           "$CI_API_V4_URL/projects/$CI_PROJECT_ID/jobs/artifacts/$CI_DEFAULT_BRANCH/download?job=evalkit"; then
+        python -c "import zipfile; zipfile.ZipFile('baseline.zip').extractall('baseline')"
+        evalkit compare baseline/evalkit-run evalkit-run --fail-on-regression --metrics "$EVALKIT_WATCH"
+      fi
+    - exit $STATUS
+  artifacts:
+    when: always
+    paths: [evalkit-run/]
+    expire_in: 30 days
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH

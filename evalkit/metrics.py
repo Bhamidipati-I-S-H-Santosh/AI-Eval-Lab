@@ -62,14 +62,13 @@ def _abstention_judge(ctx, cfg):
     """The general judge, or (abstention.judge_model) a judge on the same endpoint
     with the model the abstention check was validated on."""
     model = cfg.get("judge_model")
-    if not model or ctx.judge is None or ctx.judge.model == model:
+    if not model or ctx.judge is None or getattr(ctx.judge, "model", None) == model \
+            or not hasattr(ctx.judge, "with_model"):
         return ctx.judge
-    if model not in _ABST_JUDGES:
-        from .judge import Judge
-        j = ctx.judge
-        _ABST_JUDGES[model] = Judge(model=model, base_url=str(j.client.base_url), api_key=j.client.api_key,
-                                    cache_dir=str(j.cache_dir), retries=max(j.retries, 5))
-    return _ABST_JUDGES[model]
+    key = (id(ctx.judge), model)
+    if key not in _ABST_JUDGES:
+        _ABST_JUDGES[key] = ctx.judge.with_model(model, retries=5)
+    return _ABST_JUDGES[key]
 
 
 _VERDICTS: dict = {}   # memo: abstention, over_abstention and status_agreement share one verdict
@@ -157,6 +156,34 @@ def m_status_agreement(case, r, ctx):
         return None
     gave_up = abstention_verdict(case, r, ctx, use_status=False)["label"] == "refuse"
     return float((st == "unanswerable") == gave_up)
+
+
+_ACCESS: dict = {}
+
+
+def access_findings(case, r, ctx) -> list | None:
+    """Identity-aware check (evalkit.identity): every document this answer
+    exposed, with whether the case's test identity may read it."""
+    ic = ctx.extra.get("identity") or {}
+    if not case.identity or not ic.get("acl"):
+        return None
+    key = (case.id, r.answer, tuple(d.id for d in r.retrieved), len(r.trace))
+    if key not in _ACCESS:
+        from .identity import check_access
+        _ACCESS[key] = [f.to_dict() for f in check_access(case, r, ic["acl"], ic["users"])]
+    return _ACCESS[key]
+
+
+@metric("access_violation", higher_is_better=False)
+def m_access_violation(case, r, ctx):
+    """1 if the answer, its citations, retrieved documents or tool results
+    expose a document the case's identity may not read (unknown ACLs count
+    only with identity.unknown: violation)."""
+    findings = access_findings(case, r, ctx)
+    if findings is None:
+        return None
+    strict = (ctx.extra.get("identity") or {}).get("unknown") == "violation"
+    return float(any(f["allowed"] is False or (strict and f["allowed"] is None) for f in findings))
 
 
 @metric("source_recall")
@@ -286,6 +313,8 @@ def score_case(case: TestCase, result: AgentResult, ctx: Context, names: list[st
             scores["_abstention"] = abstention_verdict(case, result, ctx)
         except Exception:
             pass
+    if scores.get("access_violation") is not None:
+        scores["_access"] = access_findings(case, result, ctx)
     if "task_success" in names:
         scores["task_success"] = task_success(scores, result)
     return scores

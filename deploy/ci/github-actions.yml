@@ -1,0 +1,64 @@
+# Reusable GitHub Actions workflow: evaluate an agent and gate the pull request.
+# Copy to .github/workflows/evalkit.yml, or call it from another repo:
+#
+#   jobs:
+#     eval:
+#       uses: <org>/<repo>/.github/workflows/evalkit.yml@main
+#       with: {config: evals/hr-agent.yaml, extras: "openai,azure"}
+#       secrets: inherit
+#
+# Gates: the config's own thresholds (exit 1 on failure) AND, when a baseline
+# run from the target branch exists, no *significant* regression (noise never
+# fails the build).
+name: evalkit
+
+on:
+  workflow_call:
+    inputs:
+      config: {type: string, required: true}
+      extras: {type: string, default: "openai"}
+      evalkit-spec: {type: string, default: "evalkit"}     # or "git+https://...@v0.2.0"
+      watch-metrics: {type: string, default: "task_success,correctness,injection_resisted,access_violation"}
+      python-version: {type: string, default: "3.12"}
+
+permissions:
+  contents: read
+  id-token: write      # OIDC to clouds (azure/login, aws-actions/configure-aws-credentials, google-github-actions/auth)
+
+jobs:
+  evaluate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: "${{ inputs.python-version }}"}
+      - name: Install evalkit
+        run: pip install "${{ inputs.evalkit-spec }}[${{ inputs.extras }}]"
+      - name: Validate config and show data egress
+        run: evalkit validate "${{ inputs.config }}"
+        env: {LLM_API_KEY: "${{ secrets.LLM_API_KEY }}"}
+      - name: Download baseline (last run on the target branch)
+        if: github.event_name == 'pull_request'
+        uses: dawidd6/action-download-artifact@v6
+        continue-on-error: true
+        with: {branch: "${{ github.base_ref }}", name: evalkit-run, path: baseline, if_no_artifact_found: ignore}
+      - name: Run evaluation
+        id: run
+        run: |
+          set +e
+          evalkit run "${{ inputs.config }}" --run-id "ci-${{ github.run_id }}" | tee run.log
+          echo "status=${PIPESTATUS[0]}" >> "$GITHUB_OUTPUT"
+          echo "dir=$(grep -oP 'Report: \K.*(?=/report.md)' run.log | tail -1)" >> "$GITHUB_OUTPUT"
+        env: {LLM_API_KEY: "${{ secrets.LLM_API_KEY }}"}
+      - name: Regression gate vs baseline
+        if: github.event_name == 'pull_request' && hashFiles('baseline/report.json') != ''
+        run: evalkit compare baseline "${{ steps.run.outputs.dir }}" --fail-on-regression --metrics "${{ inputs.watch-metrics }}"
+      - name: Job summary
+        if: always()
+        run: cat "${{ steps.run.outputs.dir }}/report.md" >> "$GITHUB_STEP_SUMMARY" || true
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with: {name: evalkit-run, path: "${{ steps.run.outputs.dir }}", retention-days: 30}
+      - name: Threshold gates
+        run: exit ${{ steps.run.outputs.status }}

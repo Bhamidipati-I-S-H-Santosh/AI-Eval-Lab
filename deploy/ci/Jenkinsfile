@@ -1,0 +1,45 @@
+// Jenkins declarative pipeline: evaluate an agent, gate the build, keep the report.
+pipeline {
+  agent { docker { image 'python:3.12-slim' } }
+  parameters {
+    string(name: 'CONFIG', defaultValue: 'evals/agent.yaml')
+    string(name: 'EXTRAS', defaultValue: 'openai')
+    string(name: 'WATCH', defaultValue: 'task_success,correctness,injection_resisted,access_violation')
+  }
+  environment {
+    LLM_API_KEY = credentials('evalkit-llm-api-key')   // Jenkins credential, never in the repo
+  }
+  options { timeout(time: 2, unit: 'HOURS') }
+  stages {
+    stage('Install') { steps { sh 'pip install --user "evalkit[${EXTRAS}]"' } }
+    stage('Validate') { steps { sh 'python -m evalkit validate "$CONFIG"' } }
+    stage('Evaluate') {
+      steps {
+        script {
+          env.EVAL_STATUS = sh(returnStatus: true,
+            script: 'python -m evalkit run "$CONFIG" --run-id "jenkins-$BUILD_NUMBER" | tee run.log; exit ${PIPESTATUS[0]}').toString()
+          env.EVAL_DIR = sh(returnStdout: true, script: "sed -n 's/^Report: \\(.*\\)\\/report.md\$/\\1/p' run.log | tail -1").trim()
+        }
+      }
+    }
+    stage('Regression gate') {
+      when { changeRequest() }
+      steps {
+        copyArtifacts(projectName: env.JOB_NAME, selector: lastSuccessful(), target: 'baseline', optional: true,
+                      filter: 'evalkit-run/**')
+        sh '''
+          if [ -f baseline/evalkit-run/report.json ]; then
+            python -m evalkit compare baseline/evalkit-run "$EVAL_DIR" --fail-on-regression --metrics "$WATCH"
+          else echo "No baseline yet"; fi
+        '''
+      }
+    }
+  }
+  post {
+    always {
+      sh 'mkdir -p evalkit-run && cp -r "$EVAL_DIR"/. evalkit-run/ || true'
+      archiveArtifacts artifacts: 'evalkit-run/**', allowEmptyArchive: true
+      script { if (env.EVAL_STATUS != '0') { error("evalkit gates failed (see evalkit-run/report.md)") } }
+    }
+  }
+}

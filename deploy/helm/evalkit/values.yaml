@@ -1,0 +1,112 @@
+image:
+  repository: registry.corp.example/evalkit      # push the image you built from the Dockerfile
+  tag: "0.2.0"
+  pullPolicy: IfNotPresent
+imagePullSecrets: []
+
+# With local storage keep 1 replica (runs and the job queue live on one pod).
+# With shared storage (s3 / azure_blob / gcs / postgres) you may run more, but
+# each pod has its own job queue: use one replica for the API and scale runs
+# with the CLI's --shard workers (see docs/deployment.md).
+replicaCount: 1
+
+serviceAccount:
+  create: true
+  name: ""
+  # Workload identity, so no cloud keys live in the cluster:
+  #   AWS IRSA:   eks.amazonaws.com/role-arn: arn:aws:iam::123:role/evalkit
+  #   Azure WI:   azure.workload.identity/client-id: <client-id>
+  #   GKE WI:     iam.gke.io/gcp-service-account: evalkit@proj.iam.gserviceaccount.com
+  annotations: {}
+podLabels: {}          # e.g. azure.workload.identity/use: "true"
+
+# server.yaml (see deploy/examples/server.yaml). Secrets stay ${VAR} references.
+serverConfig: |
+  storage: {type: local, root: /data/runs}
+  configs_dir: /etc/evalkit/configs
+  datasets_dir: /data/datasets
+  public_url: https://evalkit.corp.example
+  session_secret: ${EVALKIT_SESSION_SECRET}
+  max_parallel_runs: 2
+  auth:
+    mode: oidc
+    oidc:
+      issuer: ${OIDC_ISSUER}
+      audience: ${OIDC_AUDIENCE}
+      client_id: ${OIDC_CLIENT_ID}
+      client_secret: ${OIDC_CLIENT_SECRET:-}
+      roles_claim: roles
+      role_map: {EvalAdmins: admin, EvalRunners: runner}
+      default_role: viewer
+    api_keys:
+      "${EVALKIT_CI_KEY}": {name: ci, roles: [runner]}
+      "${EVALKIT_INGEST_KEY}": {name: otel-collector, roles: [ingest]}
+
+# Eval configs the API may start (file name -> YAML). Admin-controlled only.
+evalConfigs: {}
+#  hr-agent.yaml: |
+#    name: hr-agent
+#    system: {type: http, url: https://hr-bot.internal/chat, answer_field: reply}
+#    dataset: {path: /data/datasets/hr-golden@3f2a9c1d7e10.jsonl}
+#    gates: {task_success: ">=0.85"}
+
+# An existing Secret with OIDC_*, EVALKIT_SESSION_SECRET, EVALKIT_*_KEY, LLM keys.
+# Create it with your secrets tooling (External Secrets, CSI driver, sealed-secrets).
+existingSecret: evalkit-secrets
+extraEnv: []
+
+persistence:
+  enabled: true            # needed for storage.type local and the audit log
+  size: 20Gi
+  storageClass: ""
+  accessModes: [ReadWriteOnce]
+
+service:
+  type: ClusterIP
+  port: 80
+
+ingress:
+  enabled: false
+  className: ""
+  annotations: {}
+  host: evalkit.corp.example
+  tls: []                  # [{secretName: evalkit-tls, hosts: [evalkit.corp.example]}]
+
+networkPolicy:
+  enabled: true
+  # namespaces allowed to reach the API / receiver (ingress controller, otel collector)
+  allowFromNamespaces: [ingress-nginx, observability]
+  # egress is open by default so the judge and systems under test are reachable;
+  # restrict it to your approved destinations (mirror privacy.allowed_hosts).
+  restrictEgress: false
+  egressCIDRs: []
+
+resources:
+  requests: {cpu: 250m, memory: 512Mi}
+  limits: {cpu: "2", memory: 2Gi}
+
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 10001
+  runAsGroup: 10001
+  fsGroup: 10001
+  seccompProfile: {type: RuntimeDefault}
+securityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  capabilities: {drop: [ALL]}
+
+nodeSelector: {}
+tolerations: []
+affinity: {}
+
+# Scheduled jobs run the same image and engine as the API.
+monitor:
+  enabled: false
+  schedule: "0 * * * *"            # hourly window
+  config: hr-agent.yaml            # a file from evalConfigs with a 'monitoring' block
+retention:
+  enabled: true
+  schedule: "30 3 * * *"
+  config: ""                       # any eval config naming the storage to purge (empty: skip)
+  olderThanDays: 90

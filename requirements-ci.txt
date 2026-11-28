@@ -1,8 +1,2 @@
-rank-bm25>=0.2.2
-openai>=1.40
-python-dotenv>=1.0
-mcp>=2.0
-pyyaml>=6.0
-requests>=2.31
-qdrant-client>=1.10
-pytest>=8.0
+# CI installs the package with its test extras (pyproject.toml).
+-e .[dev]

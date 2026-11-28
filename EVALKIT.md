@@ -14,6 +14,32 @@ a pass/fail gate for CI.
 
 Only the adapter touches the system. Everything else is reused unchanged.
 
+**Since 0.2.0 evalkit is a deployable, vendor-neutral platform** (full docs in
+[docs/](docs/index.md)):
+
+- **Plugins for every layer.** Agent systems (OpenAI Responses/Assistants, Azure
+  AI Foundry, AWS Bedrock Agents, Vertex AI, Copilot Studio, MCP), frameworks
+  (LangChain, LlamaIndex, CrewAI, Semantic Kernel), judges (any OpenAI-compatible
+  API, Azure OpenAI, Anthropic, Bedrock, Vertex, Ollama), retrievers, storage,
+  secrets managers and auth. Vendor SDKs install as extras
+  (`pip install "evalkit[azure]"`), and new plugins need no engine change.
+  `evalkit plugins list` shows which are verified live and which are tested
+  with fakes only ([docs/verification-status.md](docs/verification-status.md)).
+- **OpenTelemetry.** Evaluate any agent from its GenAI / OpenInference /
+  OpenLLMetry traces, with no adapter needed.
+- **Durable runs.** Every result is saved as it finishes. Interrupted runs
+  resume, large runs shard across workers, and budgets, rate limits and retries
+  are built in.
+- **Identity-aware testing.** Ask the same questions as different users and
+  catch documents leaked across permission boundaries (SharePoint, Google
+  Drive, Confluence, static ACLs).
+- **Server and operations.** REST API, OTLP receiver, dashboard, OIDC SSO,
+  role-based access, hash-chained audit log, production monitoring with
+  regression alerts, Docker, Helm, and CI templates for GitHub, Azure DevOps,
+  GitLab and Jenkins.
+- **Privacy.** Self-hosted, no telemetry, an egress allowlist, PII redaction,
+  encrypted judge caches and retention purges.
+
 ---
 
 ## 1. Try it in 2 minutes (no API key)

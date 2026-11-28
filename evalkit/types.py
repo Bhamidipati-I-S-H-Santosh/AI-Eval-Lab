@@ -67,6 +67,8 @@ class TestCase:
     unanswerable: bool = False
     tags: list[str] = field(default_factory=list)
     attack: dict | None = None                # set for injection cases: {"id", "canaries", ...}
+    turns: list[str] = field(default_factory=list)   # multi-turn: user messages in order (input = last)
+    identity: str | None = None               # identity-aware tests: run as this test user
     metadata: dict = field(default_factory=dict)
 
     __test__ = False  # stop pytest from collecting this class
@@ -78,6 +80,8 @@ class TestCase:
         base = {k: v for k, v in d.items() if k in known}
         if "question" in extra and "input" not in base:  # accept a common alias
             base["input"] = extra.pop("question")
+        if base.get("turns") and not base.get("input"):
+            base["input"] = base["turns"][-1]
         tc = cls(**base)
         tc.metadata.update(extra)
         return tc

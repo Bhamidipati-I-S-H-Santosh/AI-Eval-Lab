@@ -9,15 +9,11 @@ _ENV = re.compile(r"\$\{([A-Z0-9_]+)(?::-([^}]*))?\}")
 
 
 def expand_env(value: Any) -> Any:
-    """Replace ${VAR} or ${VAR:-default} in strings (recursively), so secrets
-    stay in the environment / .env, never in config files."""
-    if isinstance(value, str):
-        return _ENV.sub(lambda m: os.environ.get(m.group(1), m.group(2) or ""), value)
-    if isinstance(value, dict):
-        return {k: expand_env(v) for k, v in value.items()}
-    if isinstance(value, list):
-        return [expand_env(v) for v in value]
-    return value
+    """Replace ${VAR}, ${VAR:-default} and ${secret:NAME} in strings
+    (recursively), so secrets stay in the environment / a secrets manager,
+    never in config files. See evalkit.secrets."""
+    from .secrets import resolve_config
+    return resolve_config(value)
 
 
 def import_object(path: str) -> Any:

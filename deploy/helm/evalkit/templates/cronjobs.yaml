@@ -1,0 +1,41 @@
+{{- range $job := list "monitor" "retention" }}
+{{- $cfg := index $.Values $job }}
+{{- if and $cfg.enabled $cfg.config }}
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: {{ include "evalkit.fullname" $ }}-{{ $job }}
+  labels: {{- include "evalkit.labels" $ | nindent 4 }}
+spec:
+  schedule: {{ $cfg.schedule | quote }}
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      backoffLimit: 1
+      template:
+        metadata:
+          labels:
+            {{- include "evalkit.selectorLabels" $ | nindent 12 }}
+            {{- with $.Values.podLabels }}{{ toYaml . | nindent 12 }}{{ end }}
+        spec:
+          restartPolicy: Never
+          serviceAccountName: {{ include "evalkit.serviceAccountName" $ }}
+          securityContext: {{- toYaml $.Values.podSecurityContext | nindent 12 }}
+          containers:
+            - name: {{ $job }}
+              image: "{{ $.Values.image.repository }}:{{ $.Values.image.tag }}"
+              {{- if eq $job "monitor" }}
+              args: ["monitor", "/etc/evalkit/configs/{{ $cfg.config }}"]
+              {{- else }}
+              args: ["purge", "/etc/evalkit/configs/{{ $cfg.config }}", "--older-than-days", "{{ $cfg.olderThanDays }}"]
+              {{- end }}
+              {{- include "evalkit.envFrom" $ | nindent 14 }}
+              {{- include "evalkit.mounts" $ | nindent 14 }}
+              securityContext: {{- toYaml $.Values.securityContext | nindent 16 }}
+              resources: {{- toYaml $.Values.resources | nindent 16 }}
+          {{- include "evalkit.volumes" $ | nindent 10 }}
+---
+{{- end }}
+{{- end }}

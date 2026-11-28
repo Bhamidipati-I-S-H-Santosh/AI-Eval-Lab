@@ -5,6 +5,9 @@ on:
   pull_request:
   workflow_dispatch:   # "Run workflow" button for the agent eval
 
+permissions:
+  contents: read
+
 jobs:
   test-and-eval:
     runs-on: ubuntu-latest
@@ -14,13 +17,60 @@ jobs:
         with:
           python-version: "3.11"
       - run: pip install -r requirements-ci.txt
-      # Unit + end-to-end tests: tools, agent loop, evalkit adapters, MCP proxy (no API key)
+      # Unit, integration, security and end-to-end tests (no API keys; external services are faked)
       - run: python -m pytest -q
       # evalkit quality gate on the vector-DB path (hash embedder: no model download)
       - run: python examples/load_qdrant.py --embedder hash:256
       - run: python -m evalkit run examples/qdrant_retrieval.yaml
       # Quality gate: fails the build if retrieval quality drops below the bar
       - run: python -m src.evaluate --retrieval-only --method bm25 --min-hit-rate 0.85 --no-save
+
+  package:
+    # The core must install and run with no vendor SDKs at all.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: "3.12"}
+      - run: pip install build && python -m build
+      - name: Core-only install in a clean venv
+        run: |
+          python -m venv /tmp/core && /tmp/core/bin/pip install dist/*.whl
+          /tmp/core/bin/evalkit plugins list
+          printf '{"id":"q1","input":"How many days of annual leave?","expected_sources":["leave_policy.md"]}\n' > /tmp/cases.jsonl
+          printf 'name: core\nretriever: {type: folder, path: data/docs}\ndataset: {path: /tmp/cases.jsonl}\n' > /tmp/core.yaml
+          /tmp/core/bin/evalkit run /tmp/core.yaml
+      - uses: actions/upload-artifact@v4
+        with: {name: dist, path: dist/}
+
+  container:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build image
+        run: docker build -t evalkit:ci --build-arg EXTRAS="server,openai" .
+      - name: Smoke test (server starts, health endpoint answers, runs as non-root)
+        run: |
+          mkdir -p /tmp/ek && printf 'storage: {type: local, root: /data/runs}\nauth:\n  mode: api_key\n  api_keys:\n    "ci-key-0123456789abcdef": {name: ci, roles: [viewer]}\n' > /tmp/ek/server.yaml
+          docker run -d --name ek -p 8080:8080 -v /tmp/ek:/etc/evalkit:ro evalkit:ci
+          for i in $(seq 1 30); do curl -sf localhost:8080/healthz && break; sleep 1; done
+          curl -sf -H "x-api-key: ci-key-0123456789abcdef" localhost:8080/api/v1/plugins > /dev/null
+          test "$(docker exec ek id -u)" = "10001"
+          docker logs ek
+
+  helm:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: azure/setup-helm@v4
+      - run: helm lint deploy/helm/evalkit
+      - name: Render with every optional resource enabled
+        run: |
+          helm template t deploy/helm/evalkit \
+            --set ingress.enabled=true --set networkPolicy.restrictEgress=true \
+            --set monitor.enabled=true --set monitor.config=a.yaml --set retention.config=a.yaml \
+            --set-string 'evalConfigs.a\.yaml=name: a' > /tmp/rendered.yaml
+          python -c "import yaml; docs=[d for d in yaml.safe_load_all(open('/tmp/rendered.yaml')) if d]; print(sorted({d['kind'] for d in docs}))"
 
   # Optional: full agent eval with a real LLM. Add LLM_API_KEY under
   # Settings > Secrets and variables > Actions, then run it from the Actions tab.
@@ -30,7 +80,7 @@ jobs:
     env:
       LLM_API_KEY: ${{ secrets.LLM_API_KEY }}
       LLM_BASE_URL: https://api.groq.com/openai/v1
-      LLM_MODEL: llama-3.3-70b-versatile
+      LLM_MODEL: openai/gpt-oss-120b
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5

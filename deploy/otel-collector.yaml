@@ -1,0 +1,29 @@
+# OpenTelemetry Collector: receive OTLP from your agents, forward GenAI traces to evalkit.
+receivers:
+  otlp:
+    protocols:
+      http: {endpoint: 0.0.0.0:4318}
+      grpc: {endpoint: 0.0.0.0:4317}
+
+processors:
+  batch: {}
+  # Keep only GenAI spans (drop HTTP/DB noise) before they leave the network segment.
+  filter/genai:
+    error_mode: ignore
+    traces:
+      span:
+        - 'attributes["gen_ai.operation.name"] == nil and attributes["openinference.span.kind"] == nil and attributes["traceloop.span.kind"] == nil'
+
+exporters:
+  otlphttp/evalkit:
+    traces_endpoint: http://evalkit:8080/v1/traces
+    encoding: json
+    headers:
+      x-api-key: ${env:EVALKIT_INGEST_KEY}
+
+service:
+  pipelines:
+    traces:
+      receivers: [otlp]
+      processors: [filter/genai, batch]
+      exporters: [otlphttp/evalkit]

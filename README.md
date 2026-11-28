@@ -20,6 +20,23 @@ It has three parts:
    measures correctness, retrieval, tool use, cost, latency and resistance to
    injection.
 
+## Platform (0.2.0)
+
+evalkit has grown into a self-hosted evaluation platform that works across
+clouds, model vendors and agent frameworks. It has:
+
+- plugins for agents, judges, retrievers, storage, secrets and auth;
+- OpenTelemetry ingestion;
+- resumable and distributed runs;
+- identity-aware access-control tests;
+- a REST API and dashboard with SSO and RBAC;
+- production monitoring;
+- Docker, Helm and CI templates.
+
+See [docs/index.md](docs/index.md). For which integrations have been run
+against live services and which are tested with fakes only, see
+[docs/verification-status.md](docs/verification-status.md).
+
 ## Results
 
 All numbers below were measured on the included test sets, using
@@ -479,14 +496,27 @@ src/evaluate.py       RAG metrics, LLM judge, run history, CI gate
 src/tools.py          agent tools + prompt-injection guard
 src/agent.py          tool-calling agent loop with traces
 src/eval_agent.py     the original agent evals
-evalkit/              general evaluation framework (adapters, metrics, attacks, reports)
-evalkit/scorer_check.py  checks the abstention scorer against hand labels
+evalkit/              the evaluation platform (installable package: pyproject.toml)
+  runner.py engine.py   durable/resumable/sharded runs, budgets, rate limits, retries
+  plugins.py            plugin registry (discovery, validation, health checks)
+  adapters/             systems: python, http, mcp, cloud/ (OpenAI, Azure, Bedrock, Vertex,
+                        Copilot Studio), frameworks.py; retrievers/ (pgvector, Pinecone, ...)
+  providers/            judge/model providers (OpenAI-compatible, Azure, Anthropic, Bedrock, Vertex, Ollama)
+  storage/ secrets.py auth.py   local/S3/Blob/GCS/Postgres; secrets managers; outbound auth
+  otel/                 OpenTelemetry trace ingestion and replay
+  identity.py           identity-aware access-control testing
+  privacy.py audit.py   PII redaction, egress allowlist; hash-chained audit log
+  monitor.py            production monitoring and regression alerts
+  server/               REST API, OTLP receiver, dashboard, OIDC SSO, RBAC
+  scorer_check.py       checks the abstention scorer against hand labels
 examples/             evalkit configs and adapters (Python, HTTP, Qdrant)
-app.py                Streamlit UI
+deploy/               Docker compose, Helm chart, CI templates, OTel Collector, example server config
+docs/                 platform documentation
+app.py                Streamlit UI (demo)
 mcp_server.py         the agent's tools over MCP
-tests/                unit tests (fake LLM, no API key)
+tests/                unit, integration, security and end-to-end tests (no API keys)
 tests/fixtures/       hand-labeled answers for scorer validation
-.github/workflows/    tests + retrieval eval on every push
+.github/workflows/    tests, package, container and Helm checks on every push
 ```
 
 ## Next experiments

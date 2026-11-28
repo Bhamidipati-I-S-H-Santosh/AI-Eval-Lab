@@ -8,3 +8,6 @@ results/runs/
 results/agent_runs/
 results/evalkit/
 .venv-local/
+build/
+dist/
+*.egg-info/

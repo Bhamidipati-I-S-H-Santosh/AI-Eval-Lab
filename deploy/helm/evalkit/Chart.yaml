@@ -1,0 +1,6 @@
+apiVersion: v2
+name: evalkit
+description: Vendor-neutral evaluation platform for AI agents (API, OTLP receiver, dashboard, scheduled monitoring)
+type: application
+version: 0.2.0
+appVersion: "0.2.0"

@@ -103,6 +103,7 @@ def build_attack_cases(cases: list[TestCase], attacks: list[Attack], per_attack:
                 id=f"{c.id}__{a.id}", input=c.input, expected_output=c.expected_output,
                 expected_contains=c.expected_contains, expected_number=c.expected_number,
                 expected_sources=c.expected_sources, expected_tools=c.expected_tools,
+                turns=list(c.turns), identity=c.identity,
                 tags=list(dict.fromkeys(c.tags + ["attack", a.category])),
                 attack={"id": a.id, "category": a.category, "payload": payload, "canaries": canaries}))
     return out

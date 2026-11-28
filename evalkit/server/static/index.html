@@ -1,0 +1,188 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>evalkit</title>
+<style>
+  :root { --bg:#f7f7f5; --panel:#fff; --ink:#1d1d1b; --muted:#6b6b66; --line:#e4e3de; --accent:#2f5d8a;
+          --ok:#2e7d4f; --bad:#b3261e; --warn:#a66300; }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg:#141413; --panel:#1d1d1b; --ink:#ecebe6; --muted:#9a9994; --line:#33332f; --accent:#7fb0e0;
+            --ok:#6cc08f; --bad:#ef8a83; --warn:#e3b05a; } }
+  * { box-sizing: border-box; }
+  body { margin:0; font:14px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif; background:var(--bg); color:var(--ink); }
+  header { display:flex; align-items:center; gap:16px; padding:12px 24px; border-bottom:1px solid var(--line); background:var(--panel); }
+  header h1 { font-size:16px; margin:0; letter-spacing:.2px; }
+  nav button { background:none; border:0; color:var(--muted); font:inherit; padding:6px 10px; border-radius:6px; cursor:pointer; }
+  nav button.on { color:var(--ink); background:var(--bg); }
+  #who { margin-left:auto; color:var(--muted); font-size:13px; }
+  #who a { color:var(--accent); }
+  main { padding:20px 24px; max-width:1200px; margin:0 auto; }
+  .panel { background:var(--panel); border:1px solid var(--line); border-radius:10px; padding:16px; margin-bottom:16px; }
+  table { width:100%; border-collapse:collapse; font-variant-numeric: tabular-nums; }
+  th, td { text-align:left; padding:7px 8px; border-bottom:1px solid var(--line); vertical-align:top; }
+  th { color:var(--muted); font-weight:500; font-size:12px; text-transform:uppercase; letter-spacing:.4px; }
+  tr.click { cursor:pointer; } tr.click:hover td { background:var(--bg); }
+  .pill { display:inline-block; padding:1px 8px; border-radius:10px; font-size:12px; border:1px solid currentColor; }
+  .ok { color:var(--ok); } .bad { color:var(--bad); } .warn { color:var(--warn); } .muted { color:var(--muted); }
+  .row { display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
+  select, input, .btn { font:inherit; padding:6px 10px; border:1px solid var(--line); border-radius:6px; background:var(--panel); color:var(--ink); }
+  .btn { background:var(--accent); color:#fff; border-color:var(--accent); cursor:pointer; }
+  .btn:disabled { opacity:.5; cursor:default; }
+  #report h1 { font-size:18px; } #report h2 { font-size:15px; margin-top:20px; } #report h3 { font-size:14px; }
+  #report code { background:var(--bg); padding:1px 4px; border-radius:4px; }
+  .err { color:var(--bad); }
+  .bar { height:8px; background:var(--line); border-radius:4px; overflow:hidden; min-width:80px; }
+  .bar > i { display:block; height:100%; background:var(--accent); }
+</style>
+</head>
+<body>
+<header>
+  <h1>evalkit</h1>
+  <nav id="nav">
+    <button data-v="runs" class="on">Runs</button>
+    <button data-v="jobs">Jobs</button>
+    <button data-v="monitoring">Monitoring</button>
+    <button data-v="plugins">Plugins</button>
+    <button data-v="audit">Audit</button>
+  </nav>
+  <div id="who"></div>
+</header>
+<main id="main"></main>
+<script>
+const $ = (s, el=document) => el.querySelector(s);
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+let me = null;
+
+async function api(path, opts={}) {
+  const r = await fetch(path, {credentials:"same-origin", ...opts, headers:{"Content-Type":"application/json", ...(opts.headers||{})}});
+  if (r.status === 401) { renderLogin(); throw new Error("authentication required"); }
+  const ct = r.headers.get("content-type") || "";
+  const body = ct.includes("json") ? await r.json() : await r.text();
+  if (!r.ok) throw new Error(body.error || r.statusText);
+  return body;
+}
+
+function renderLogin() {
+  $("#main").innerHTML = `<div class="panel"><p>Sign in to view evaluations.</p><a class="btn" href="/auth/login">Sign in with your organization</a></div>`;
+}
+
+// Minimal, safe markdown (escaped first): headings, tables, lists, bold, code.
+function md(text) {
+  const lines = esc(text).split("\n"); let html = "", i = 0;
+  const inline = s => s.replace(/\*\*(.+?)\*\*/g, "<b>$1</b>").replace(/`([^`]+)`/g, "<code>$1</code>");
+  while (i < lines.length) {
+    const l = lines[i];
+    if (/^\|/.test(l)) {
+      const rows = []; while (i < lines.length && /^\|/.test(lines[i])) rows.push(lines[i++]);
+      const cells = r => r.replace(/^\||\|$/g, "").split("|").map(c => c.trim());
+      html += "<table><tr>" + cells(rows[0]).map(c => `<th>${inline(c)}</th>`).join("") + "</tr>";
+      rows.slice(2).forEach(r => html += "<tr>" + cells(r).map(c => `<td>${inline(c)}</td>`).join("") + "</tr>");
+      html += "</table>"; continue;
+    }
+    const h = l.match(/^(#{1,3}) (.*)/);
+    if (h) html += `<h${h[1].length}>${inline(h[2])}</h${h[1].length}>`;
+    else if (/^\s*- /.test(l)) html += `<div>• ${inline(l.replace(/^\s*- /, ""))}</div>`;
+    else if (l.trim()) html += `<p>${inline(l)}</p>`;
+    i++;
+  }
+  return html;
+}
+
+const fmt = v => v === null || v === undefined ? "–" : (typeof v === "number" ? (Math.round(v * 1000) / 1000) : esc(v));
+
+async function viewRuns() {
+  const [runs, cfgs] = await Promise.all([api("/api/v1/runs"), api("/api/v1/configs").catch(() => ({configs: []}))]);
+  const canRun = me && me.roles.some(r => r === "runner" || r === "admin");
+  $("#main").innerHTML = `
+    ${canRun ? `<div class="panel row"><b>Start a run</b>
+      <select id="cfg">${cfgs.configs.map(c => `<option>${esc(c)}</option>`).join("")}</select>
+      <input id="lim" type="number" min="1" placeholder="limit (optional)" style="width:140px">
+      <button class="btn" id="go" ${cfgs.configs.length ? "" : "disabled"}>Run</button><span id="msg" class="muted"></span></div>` : ""}
+    <div class="panel"><table><tr><th>Run</th><th>Status</th><th>Gates</th><th>Task success</th><th>Correctness</th>
+      <th>Injection resisted</th><th>Access violations</th><th>Errors</th><th>Dataset</th></tr>
+      ${runs.runs.map(r => `<tr class="click" data-id="${esc(r.run_id)}"><td>${esc(r.run_id)}</td>
+        <td>${esc(r.status || "legacy")}</td>
+        <td>${r.gates ? `<span class="pill ${r.gates === "PASSED" ? "ok" : "bad"}">${r.gates}</span>` : "–"}</td>
+        <td>${fmt(r.headline?.task_success)}</td><td>${fmt(r.headline?.correctness)}</td>
+        <td>${fmt(r.headline?.injection_resisted)}</td><td>${fmt(r.headline?.access_violation)}</td>
+        <td>${fmt(r.headline?.error)}</td><td class="muted">${esc((r.dataset_sha256 || "").slice(0, 10))}</td></tr>`).join("")
+        || `<tr><td colspan="9" class="muted">No runs yet.</td></tr>`}
+    </table></div><div class="panel" id="report" hidden></div>`;
+  document.querySelectorAll("tr.click").forEach(tr => tr.onclick = () => showReport(tr.dataset.id));
+  if (canRun && $("#go")) $("#go").onclick = async () => {
+    const body = {config: $("#cfg").value}; if ($("#lim").value) body.limit = +$("#lim").value;
+    try { const j = await api("/api/v1/runs", {method:"POST", body: JSON.stringify(body)});
+          $("#msg").textContent = `queued job ${j.job} (run ${j.run_id})`; }
+    catch (e) { $("#msg").innerHTML = `<span class="err">${esc(e.message)}</span>`; }
+  };
+}
+
+async function showReport(id) {
+  const box = $("#report"); box.hidden = false; box.innerHTML = "Loading…";
+  try { box.innerHTML = md(await api(`/api/v1/runs/${encodeURIComponent(id)}/artifacts/report.md`)); }
+  catch (e) { box.innerHTML = `<span class="err">${esc(e.message)}</span>`; }
+  box.scrollIntoView({behavior: "smooth"});
+}
+
+async function viewJobs() {
+  const j = await api("/api/v1/jobs");
+  $("#main").innerHTML = `<div class="panel"><table><tr><th>Job</th><th>Config</th><th>Run</th><th>Status</th><th>By</th><th>Submitted</th><th>Detail</th></tr>
+    ${j.jobs.map(x => `<tr><td>${esc(x.id)}</td><td>${esc(x.config || "")}</td><td>${esc(x.run_id || "")}</td>
+      <td class="${x.status === "failed" ? "bad" : x.status === "finished" ? "ok" : "warn"}">${esc(x.status)}</td>
+      <td>${esc(x.submitted_by)}</td><td>${esc(x.submitted_at)}</td><td class="muted">${esc(x.error || x.gates || "")}</td></tr>`).join("")
+      || `<tr><td colspan="7" class="muted">No jobs since the server started.</td></tr>`}</table></div>`;
+}
+
+async function viewMonitoring() {
+  const m = await api("/api/v1/monitoring");
+  const metrics = ["error", "gave_up", "faithfulness", "relevance", "latency_s"];
+  $("#main").innerHTML = `<div class="panel"><table><tr><th>Window end</th><th>Traces</th>
+    ${metrics.map(x => `<th>${x}</th>`).join("")}<th>Alerts</th></tr>
+    ${m.windows.slice().reverse().map(w => `<tr><td>${esc(w.window_end)}</td><td>${w.n}</td>
+      ${metrics.map(x => `<td>${fmt(w.overall?.[x]?.mean)}</td>`).join("")}
+      <td>${(w.alerts || []).length ? `<span class="pill bad">${w.alerts.length}</span> ` +
+        w.alerts.map(a => esc(`${a.metric} ${a.previous}→${a.current}`)).join("; ") : `<span class="muted">none</span>`}</td></tr>`).join("")
+      || `<tr><td colspan="${metrics.length + 3}" class="muted">No monitoring windows yet. Send traces to /v1/traces and run evalkit monitor.</td></tr>`}
+  </table></div>`;
+}
+
+async function viewPlugins() {
+  const p = await api("/api/v1/plugins");
+  $("#main").innerHTML = `<div class="panel"><p class="muted">verified = exercised against the real library or service;
+    mock-tested = implemented against the vendor's documented API, tested with fakes only.</p>
+    <table><tr><th>Category</th><th>Name</th><th>Status</th><th>Extra</th><th>Description</th></tr>
+    ${p.plugins.map(x => `<tr><td>${esc(x.category)}</td><td><code>${esc(x.name)}</code></td>
+      <td class="${x.status === "verified" ? "ok" : "warn"}">${esc(x.status)}</td><td>${esc(x.extra || "–")}</td>
+      <td>${esc(x.description)}</td></tr>`).join("")}</table></div>`;
+}
+
+async function viewAudit() {
+  try {
+    const a = await api("/api/v1/audit");
+    $("#main").innerHTML = `<div class="panel"><p>Hash chain: <span class="${a.chain_ok ? "ok" : "bad"}">${esc(a.detail)}</span></p>
+      <table><tr><th>Time</th><th>Actor</th><th>Event</th><th>Details</th></tr>
+      ${a.events.slice().reverse().map(e => { const {ts, actor, event, prev, hash, ...rest} = e;
+        return `<tr><td>${esc(ts)}</td><td>${esc(actor)}</td><td>${esc(event)}</td><td class="muted">${esc(JSON.stringify(rest))}</td></tr>`; }).join("")}
+      </table></div>`;
+  } catch (e) { $("#main").innerHTML = `<div class="panel err">${esc(e.message)}</div>`; }
+}
+
+const views = {runs: viewRuns, jobs: viewJobs, monitoring: viewMonitoring, plugins: viewPlugins, audit: viewAudit};
+document.querySelectorAll("#nav button").forEach(b => b.onclick = () => {
+  document.querySelectorAll("#nav button").forEach(x => x.classList.toggle("on", x === b));
+  views[b.dataset.v]().catch(e => { if (e.message !== "authentication required") $("#main").innerHTML = `<div class="panel err">${esc(e.message)}</div>`; });
+});
+
+(async () => {
+  const r = await fetch("/api/v1/me", {credentials: "same-origin"});
+  const body = await r.json();
+  if (!body.authenticated) { $("#who").innerHTML = body.mode === "oidc" ? `<a href="/auth/login">Sign in</a>` : ""; renderLogin(); return; }
+  me = body;
+  $("#who").innerHTML = `${esc(me.name)} · ${esc(me.roles.join(", "))}${me.mode === "oidc" ? ` · <a href="/auth/logout">Sign out</a>` : ""}`;
+  viewRuns().catch(e => $("#main").innerHTML = `<div class="panel err">${esc(e.message)}</div>`);
+})();
+</script>
+</body>
+</html>

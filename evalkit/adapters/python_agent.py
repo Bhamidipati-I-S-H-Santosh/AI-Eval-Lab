@@ -38,11 +38,23 @@ class PythonAgentAdapter(AgentAdapter):
       type: python
       target: my_package.my_agent:answer      # callable(input) -> str | dict | AgentResult
       retriever_hook: my_package.my_agent:set_search   # optional, enables injection tests
+      identity_hook: my_package.my_agent:act_as        # optional, identity-aware tests: fn(user_name)
     """
 
-    def __init__(self, target: str | Callable, retriever_hook: str | Callable | None = None, **_):
+    def __init__(self, target: str | Callable, retriever_hook: str | Callable | None = None,
+                 identity_hook: str | Callable | None = None, **_):
         self.fn = import_object(target) if isinstance(target, str) else target
         self.hook = import_object(retriever_hook) if isinstance(retriever_hook, str) else retriever_hook
+        self.identity_hook = import_object(identity_hook) if isinstance(identity_hook, str) else identity_hook
+
+    @property
+    def supports_identity(self) -> bool:
+        return self.identity_hook is not None
+
+    def set_identity(self, name: str | None) -> None:
+        if self.identity_hook is None:
+            raise NotImplementedError("set 'identity_hook' in the config to switch identities")
+        self.identity_hook(name)
 
     @property
     def supports_retriever_injection(self) -> bool:
