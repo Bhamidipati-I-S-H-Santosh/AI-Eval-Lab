@@ -158,8 +158,14 @@ def create_app(cfg: dict | None = None):
         if rep:
             r = json.loads(rep)
             meta["gates"] = "FAILED" if r.get("gate_failures") else "PASSED"
+            meta["gate_failures"] = r.get("gate_failures") or []
+            meta["timestamp"] = r.get("timestamp")
+            meta.setdefault("name", r.get("name"))
+            meta["cases"] = r.get("cases")
             meta["headline"] = {k: (r.get("overall", {}).get(k) or {}).get("mean")
-                                for k in ("task_success", "correctness", "injection_resisted", "access_violation", "error")}
+                                for k in ("task_success", "correctness", "faithfulness", "injection_resisted",
+                                          "access_violation", "error", "latency_s", "total_tokens", "abstention")}
+        meta.setdefault("name", rid.rsplit("-", 2)[0] if rid.count("-") >= 2 else rid)
         return meta
 
     # ---------- public ----------
@@ -184,7 +190,21 @@ def create_app(cfg: dict | None = None):
         rep = local.read_text(f"{rid}/report.json") or storage.read_text(f"{rid}/report.json")
         if rep is None and not (local.read_text(f"{rid}/meta.json") or storage.read_text(f"{rid}/meta.json")):
             return JSONResponse({"error": "run not found"}, status_code=404)
-        return JSONResponse({"meta": run_meta(rid), "report": json.loads(rep) if rep else None})
+        meta = run_meta(rid)
+        res = local.root / rid / "results.jsonl"
+        if res.is_file():
+            keys = set()
+            for line in res.read_text(encoding="utf-8").splitlines():
+                try:
+                    r = json.loads(line)
+                    keys.add((r["case_id"], r["repeat"]))
+                except (ValueError, KeyError):
+                    continue          # a line still being written
+            done = len(keys)
+        else:
+            done = len(storage.list(f"{rid}/records/"))
+        meta["progress"] = {"done": done, "planned": meta.get("planned")}
+        return JSONResponse({"meta": meta, "report": json.loads(rep) if rep else None})
 
     @guarded("read")
     async def get_artifact(request, p):
@@ -196,6 +216,58 @@ def create_app(cfg: dict | None = None):
         if text is None:
             return JSONResponse({"error": "not found"}, status_code=404)
         return PlainTextResponse(text, media_type="text/markdown" if name.endswith(".md") else "application/json")
+
+    def _lines(text):
+        return [json.loads(l) for l in (text or "").splitlines() if l.strip()]
+
+    @guarded("read")
+    async def run_cases(request, p):
+        """Per-case results for the case explorer: input, answer, scores, trace, sources."""
+        rid = safe_name(request.path_params["run_id"], "run")
+        read = lambda k: local.read_text(f"{rid}/{k}") or storage.read_text(f"{rid}/{k}")
+        cases = {c["id"]: c for c in _lines(read("cases.jsonl"))}
+        if not cases:
+            return JSONResponse({"error": "run not found"}, status_code=404)
+        scores = {(r["case_id"], r["repeat"]): r["scores"] for r in _lines(read("scores.jsonl"))}
+        rows = _lines(read("results.jsonl")) or [json.loads(t) for k in storage.list(f"{rid}/records/")
+                                                 if (t := storage.read_text(k))]
+        latest = {}
+        for r in rows:
+            latest[(r["case_id"], r["repeat"])] = r
+        from ..privacy import redact_pii
+        from ..secrets import redact
+        red = bool((cfg.get("privacy") or {}).get("redact_ui", (cfg.get("privacy") or {}).get("redact_reports")))
+        clean = (lambda t: redact_pii(redact(t or ""))[0]) if red else (lambda t: redact(t or ""))
+        out = []
+        for (cid, rep_), r in latest.items():
+            c, res = cases.get(cid, {"id": cid}), r.get("result") or {}
+            out.append({
+                "case_id": cid, "repeat": rep_, "input": clean(c.get("input", "")), "tags": c.get("tags", []),
+                "identity": c.get("identity"), "attack": (c.get("attack") or {}).get("id"),
+                "expected": clean(str(c.get("expected_output") or c.get("expected_contains") or
+                                      c.get("expected_number") or ("(unanswerable)" if c.get("unanswerable") else ""))),
+                "answer": clean(res.get("answer", ""))[:6000], "error": res.get("error"), "status": res.get("status"),
+                "latency_s": res.get("latency_s"),
+                "tokens": (res.get("prompt_tokens") or 0) + (res.get("completion_tokens") or 0),
+                "trace": [{"tool": t.get("tool"), "args": clean(json.dumps(t.get("args"), ensure_ascii=False))[:800],
+                           "result": clean(t.get("result") or "")[:800]} for t in res.get("trace") or []][:30],
+                "retrieved": [{"id": d.get("id"), "score": d.get("score"),
+                               "source": (d.get("metadata") or {}).get("source")} for d in res.get("retrieved") or []][:20],
+                "scores": scores.get((cid, rep_), {}),
+            })
+        return JSONResponse({"run_id": rid, "cases": out})
+
+    @guarded("read")
+    async def compare_api(request, p):
+        a = safe_name(request.query_params.get("a", ""), "run")
+        b = safe_name(request.query_params.get("b", ""), "run")
+        for rid in (a, b):
+            if not (local.root / rid / "report.json").is_file():
+                return JSONResponse({"error": f"run '{rid}' has no local report"}, status_code=404)
+        from ..runner import compare_runs
+        alpha = float(request.query_params.get("alpha", 0.05))
+        return JSONResponse({"a": run_meta(a), "b": run_meta(b), "alpha": alpha,
+                             "metrics": compare_runs(str(local.root / a), str(local.root / b), alpha)})
 
     @guarded("run")
     async def start_run(request, p):
@@ -368,6 +440,8 @@ def create_app(cfg: dict | None = None):
         Route("/api/v1/runs/{run_id}", delete_run, methods=["DELETE"]),
         Route("/api/v1/runs/{run_id}/resume", resume_run, methods=["POST"]),
         Route("/api/v1/runs/{run_id}/artifacts/{name}", get_artifact),
+        Route("/api/v1/runs/{run_id}/cases", run_cases),
+        Route("/api/v1/compare", compare_api),
         Route("/api/v1/jobs", list_jobs), Route("/api/v1/jobs/{job_id}", get_job),
         Route("/api/v1/configs", list_configs), Route("/api/v1/plugins", plugins),
         Route("/api/v1/datasets", list_datasets, methods=["GET"]),

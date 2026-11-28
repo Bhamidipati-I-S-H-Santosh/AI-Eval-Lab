@@ -538,7 +538,7 @@ def _resolve_ref(ref: str | Path | None) -> tuple[Path | None, str | None]:
 
 def run(config_path: str | None = None, limit: int | None = None, log=print, resume: str | None = None,
         run_id: str | None = None, shard: tuple[int, int] | None = None, score: bool = True,
-        execute: bool = True, overrides: dict | None = None):
+        execute: bool = True, overrides: dict | None = None, on_start=None):
     """Start a run, or continue one (resume=run dir or id). Returns (report, run_dir);
     report is None when score=False (shard workers)."""
     from . import audit
@@ -587,6 +587,17 @@ def run(config_path: str | None = None, limit: int | None = None, log=print, res
             return None, local.run_dir(rid)
 
         existing = dedupe(_merged_records(local, mirror, rid))
+        planned = len(cases) * cfg.get("run", {}).get("repeats", 1)
+        meta["planned"] = planned
+        _write_artifact(local, mirror, f"{rid}/meta.json",
+                        json.dumps({**meta, "status": "running", "planned": planned,
+                                    "started_at": datetime.now(timezone.utc).isoformat(timespec="seconds")},
+                                   indent=2), log)
+        if on_start is not None:          # e.g. the CLI opening the dashboard on this run
+            try:
+                on_start(rid, local.root)
+            except Exception as e:
+                log(f"  (could not open the dashboard: {type(e).__name__}: {e})")
         done = {(r["case_id"], r["repeat"]) for r in existing if not (r.get("result") or {}).get("error")}
         run_cfg = cfg.get("run", {})
         repeats = run_cfg.get("repeats", 1)

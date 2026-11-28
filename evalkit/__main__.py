@@ -1,7 +1,10 @@
 """evalkit command line.
 
+Dashboard
+  python -m evalkit ui [--port 8765] [--stop]       open the local dashboard (runs open it automatically)
+
 Running evaluations
-  python -m evalkit run CONFIG [--limit N]          run, score, report; exit 1 if a gate fails
+  python -m evalkit run CONFIG [--limit N] [--no-ui]   run, score, report; exit 1 if a gate fails
   python -m evalkit run CONFIG --resume RUN         continue an interrupted run (dir or id)
   python -m evalkit resume RUN_DIR                  same, using the run's saved config
   python -m evalkit prepare CONFIG --run-id ID      freeze the cases for distributed workers
@@ -51,6 +54,14 @@ def _shard(text: str | None):
     return k, n
 
 
+def _ui_hook(a):
+    """Open the local dashboard on the run as soon as it starts (not in CI / with --no-ui)."""
+    if getattr(a, "no_ui", False) or getattr(a, "shard", None):
+        return None
+    from . import ui
+    return None if ui.disabled() else (lambda run_id, root: ui.open_run(run_id, root))
+
+
 def _finish(report, run_dir, runner) -> int:
     runner.print_summary(report)
     print(f"\nReport: {run_dir / 'report.md'}")
@@ -70,7 +81,11 @@ def main(argv=None) -> int:
     r.add_argument("--run-id", help="use this run id (shared by distributed workers)")
     r.add_argument("--shard", type=_shard, help="run only slice i of N, e.g. 0/4")
     r.add_argument("--no-score", action="store_true", help="record results only (shard workers)")
-    rr = sub.add_parser("resume"); rr.add_argument("run_dir")
+    r.add_argument("--no-ui", action="store_true", help="don't open the dashboard on this run")
+    u = sub.add_parser("ui"); u.add_argument("--port", type=int); u.add_argument("--root", default="results/evalkit")
+    u.add_argument("--configs", default="examples"); u.add_argument("--no-browser", action="store_true")
+    u.add_argument("--stop", action="store_true")
+    rr = sub.add_parser("resume"); rr.add_argument("run_dir"); rr.add_argument("--no-ui", action="store_true")
     pr = sub.add_parser("prepare"); pr.add_argument("config"); pr.add_argument("--run-id", required=True)
     fz = sub.add_parser("finalize"); fz.add_argument("run"); fz.add_argument("--config")
     s = sub.add_parser("smoke"); s.add_argument("config"); s.add_argument("--n", type=int, default=3)
@@ -114,9 +129,16 @@ def main(argv=None) -> int:
 
 
 def _dispatch(a, runner) -> int:
+    if a.cmd == "ui":
+        from . import ui
+        if a.stop:
+            print(ui.stop(a.root)); return 0
+        ui.serve_local(a.root, port=a.port or ui.DEFAULT_PORT, configs_dir=a.configs, browser=not a.no_browser)
+        return 0
+
     if a.cmd == "run":
         report, run_dir = runner.run(a.config, limit=a.limit, resume=a.resume, run_id=a.run_id,
-                                     shard=a.shard, score=not a.no_score)
+                                     shard=a.shard, score=not a.no_score, on_start=_ui_hook(a))
         if report is None:
             print(f"\nRecorded results for this worker in {run_dir}. Score all shards with: "
                   f"python -m evalkit finalize {run_dir.name} --config {a.config}")
@@ -124,7 +146,7 @@ def _dispatch(a, runner) -> int:
         return _finish(report, run_dir, runner)
 
     if a.cmd == "resume":
-        return _finish(*runner.run(None, resume=a.run_dir), runner)
+        return _finish(*runner.run(None, resume=a.run_dir, on_start=_ui_hook(a)), runner)
 
     if a.cmd == "prepare":
         _, run_dir = runner.run(a.config, run_id=a.run_id, score=False, execute=False)

@@ -4,6 +4,7 @@
     { "name": "Agent: ask a question", "type": "debugpy", "request": "launch", "module": "src.agent",
       "args": ["I'm going to London for 4 nights. Max I can claim for hotel and meals?"], "envFile": "${workspaceFolder}/.env" },
     { "name": "RAG eval (no key)", "type": "debugpy", "request": "launch", "module": "src.evaluate", "args": ["--retrieval-only"] },
+    { "name": "evalkit: dashboard", "type": "debugpy", "request": "launch", "module": "evalkit", "args": ["ui"], "envFile": "${workspaceFolder}/.env", "env": {"PYTHONUTF8": "1"} },
     { "name": "evalkit: Northwind agent", "type": "debugpy", "request": "launch", "module": "evalkit", "args": ["run", "examples/northwind.yaml"], "envFile": "${workspaceFolder}/.env" },
     { "name": "evalkit: Qdrant retrieval", "type": "debugpy", "request": "launch", "module": "evalkit", "args": ["run", "examples/qdrant_retrieval.yaml"] },
     { "name": "Mock HTTP agent", "type": "debugpy", "request": "launch", "program": "examples/mock_http_agent.py" }

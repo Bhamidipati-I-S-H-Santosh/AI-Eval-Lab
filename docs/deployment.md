@@ -6,9 +6,16 @@ engine (`evalkit.runner`). Pick the shapes you need.
 ## 1. CLI on a workstation or build agent
 
 ```bash
-pip install "evalkit[openai]"
-evalkit run evals/hr-agent.yaml
+pip install "evalkit[openai,server]"
+evalkit run evals/hr-agent.yaml      # opens the dashboard on this run, live
+evalkit ui                           # open the dashboard any time (http://127.0.0.1:8765)
+evalkit ui --stop                    # stop a dashboard started in the background
 ```
+
+On a workstation, `evalkit run` starts the local dashboard in the background
+(bound to 127.0.0.1, no sign-in) if it isn't running, and opens your browser on
+the run: progress updates live, and the report appears when scoring finishes.
+It never opens in CI (`CI` env var), with `--no-ui`, or with `EVALKIT_NO_UI=1`.
 
 ## 2. CI/CD quality gates
 

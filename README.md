@@ -33,7 +33,14 @@ clouds, model vendors and agent frameworks. It has:
 - production monitoring;
 - Docker, Helm and CI templates.
 
-See [docs/index.md](docs/index.md). For which integrations have been run
+See [docs/index.md](docs/index.md).
+
+**Dashboard:** `python -m evalkit ui` opens it at http://127.0.0.1:8765. Every
+`python -m evalkit run ...` opens it on that run automatically. It covers:
+
+- runs with confidence intervals, and a case-by-case explorer with traces;
+- run comparison with significance tests;
+- jobs, datasets, production monitoring, the plugin catalogue and the audit log. For which integrations have been run
 against live services and which are tested with fakes only, see
 [docs/verification-status.md](docs/verification-status.md).
 

@@ -233,3 +233,34 @@ def test_oidc_requires_session_secret_and_none_mode_is_local_only(tmp_path):
     from evalkit.server.app import serve
     with pytest.raises(ConfigError, match="local development"):
         serve(None, host="0.0.0.0")
+
+
+def test_dashboard_endpoints_cases_compare_progress(server):
+    c, _, tmp = server
+    ids = []
+    for _ in range(2):
+        r = c.post("/api/v1/runs", json={"config": "demo"}, headers=h(RUNNER))
+        _wait(c, r.json()["job"])
+        ids.append(r.json()["run_id"])
+        time.sleep(1.1)                                   # run ids are per-second
+    d = c.get(f"/api/v1/runs/{ids[0]}", headers=h(VIEWER)).json()
+    assert d["meta"]["progress"] == {"done": 3, "planned": 3} and d["meta"]["status"] == "complete"
+    cases = c.get(f"/api/v1/runs/{ids[0]}/cases", headers=h(VIEWER)).json()["cases"]
+    assert len(cases) == 3 and cases[0]["answer"].startswith("You get 24 days")
+    assert cases[0]["scores"]["answer_contains"] == 1.0
+    cmp = c.get(f"/api/v1/compare?a={ids[0]}&b={ids[1]}", headers=h(VIEWER)).json()
+    row = {m["metric"]: m for m in cmp["metrics"]}["answer_contains"]
+    assert row["verdict"] == "same" and row["n"] == 3
+    assert c.get("/api/v1/compare?a=../x&b=y", headers=h(VIEWER)).status_code == 400
+    assert c.get(f"/api/v1/runs/{ids[0]}/cases").status_code == 401
+    html = c.get("/").text
+    assert "evalkit" in html and "<script>" in html
+
+
+def test_dashboard_does_not_open_in_ci(monkeypatch):
+    from evalkit import ui
+    monkeypatch.setenv("CI", "true")
+    assert ui.disabled()
+    monkeypatch.delenv("CI")
+    monkeypatch.setenv("EVALKIT_NO_UI", "1")
+    assert ui.disabled()

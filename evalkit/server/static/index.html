@@ -4,184 +4,982 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>evalkit</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%232370cd'/%3E%3Cpath d='M9 17l4.5 4.5L23 11' stroke='white' stroke-width='3' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E">
 <style>
-  :root { --bg:#f7f7f5; --panel:#fff; --ink:#1d1d1b; --muted:#6b6b66; --line:#e4e3de; --accent:#2f5d8a;
-          --ok:#2e7d4f; --bad:#b3261e; --warn:#a66300; }
-  @media (prefers-color-scheme: dark) {
-    :root { --bg:#141413; --panel:#1d1d1b; --ink:#ecebe6; --muted:#9a9994; --line:#33332f; --accent:#7fb0e0;
-            --ok:#6cc08f; --bad:#ef8a83; --warn:#e3b05a; } }
-  * { box-sizing: border-box; }
-  body { margin:0; font:14px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif; background:var(--bg); color:var(--ink); }
-  header { display:flex; align-items:center; gap:16px; padding:12px 24px; border-bottom:1px solid var(--line); background:var(--panel); }
-  header h1 { font-size:16px; margin:0; letter-spacing:.2px; }
-  nav button { background:none; border:0; color:var(--muted); font:inherit; padding:6px 10px; border-radius:6px; cursor:pointer; }
-  nav button.on { color:var(--ink); background:var(--bg); }
-  #who { margin-left:auto; color:var(--muted); font-size:13px; }
-  #who a { color:var(--accent); }
-  main { padding:20px 24px; max-width:1200px; margin:0 auto; }
-  .panel { background:var(--panel); border:1px solid var(--line); border-radius:10px; padding:16px; margin-bottom:16px; }
-  table { width:100%; border-collapse:collapse; font-variant-numeric: tabular-nums; }
-  th, td { text-align:left; padding:7px 8px; border-bottom:1px solid var(--line); vertical-align:top; }
-  th { color:var(--muted); font-weight:500; font-size:12px; text-transform:uppercase; letter-spacing:.4px; }
-  tr.click { cursor:pointer; } tr.click:hover td { background:var(--bg); }
-  .pill { display:inline-block; padding:1px 8px; border-radius:10px; font-size:12px; border:1px solid currentColor; }
-  .ok { color:var(--ok); } .bad { color:var(--bad); } .warn { color:var(--warn); } .muted { color:var(--muted); }
-  .row { display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
-  select, input, .btn { font:inherit; padding:6px 10px; border:1px solid var(--line); border-radius:6px; background:var(--panel); color:var(--ink); }
-  .btn { background:var(--accent); color:#fff; border-color:var(--accent); cursor:pointer; }
-  .btn:disabled { opacity:.5; cursor:default; }
-  #report h1 { font-size:18px; } #report h2 { font-size:15px; margin-top:20px; } #report h3 { font-size:14px; }
-  #report code { background:var(--bg); padding:1px 4px; border-radius:4px; }
-  .err { color:var(--bad); }
-  .bar { height:8px; background:var(--line); border-radius:4px; overflow:hidden; min-width:80px; }
-  .bar > i { display:block; height:100%; background:var(--accent); }
+/* ---------- tokens (reference palette; dark steps selected, not flipped) ---------- */
+:root {
+  color-scheme: light;
+  --page: #f6f6f4; --surface: #ffffff; --surface-2: #f9f9f8; --sunken: #f1f1ef;
+  --ink: #191919; --ink-2: #555552; --ink-3: #6b6b67; --line: #e7e7e4; --line-2: #d6d6d2;
+  --axis: #c2c2c2; --grid: #ececea;
+  --accent: #2370cd; --accent-ink: #1b64be; --accent-wash: #e8f1fc; --accent-track: #cce3fd;
+  --s1: #257de0; --s2: #f47230; --s3: #00b894; --s4: #f2a600;
+  --good: #0aac23; --good-ink: #006c10; --good-wash: #e7f6e9;
+  --warn: #fbb315; --warn-ink: #8a5a00; --warn-wash: #fff5dc;
+  --serious: #f18a59;
+  --crit: #dc3c3d; --crit-ink: #b42324; --crit-wash: #fdecec;
+  --shadow: 0 1px 2px rgba(16,16,14,.05), 0 1px 1px rgba(16,16,14,.03);
+  --shadow-lg: 0 12px 32px rgba(16,16,14,.14), 0 2px 6px rgba(16,16,14,.06);
+  --radius: 10px;
+}
+@media (prefers-color-scheme: dark) {
+  :root:where(:not([data-theme="light"])) {
+    color-scheme: dark;
+    --page: #0f0f0e; --surface: #191918; --surface-2: #1e1e1d; --sunken: #141413;
+    --ink: #efefec; --ink-2: #b4b4af; --ink-3: #9c9c97; --line: #2c2c2a; --line-2: #3a3a37;
+    --axis: #474747; --grid: #262624;
+    --accent: #519ced; --accent-ink: #84b9f3; --accent-wash: #142336; --accent-track: #1d3554;
+    --s1: #338ced; --s2: #e76624; --s3: #00a888; --s4: #d28e05;
+    --good: #0aac23; --good-ink: #53c556; --good-wash: #10261a;
+    --warn: #fbb315; --warn-ink: #f3c45a; --warn-wash: #2b2412;
+    --crit: #dc3c3d; --crit-ink: #f07f80; --crit-wash: #301617;
+    --shadow: 0 1px 2px rgba(0,0,0,.4); --shadow-lg: 0 16px 40px rgba(0,0,0,.55);
+  }
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --page: #0f0f0e; --surface: #191918; --surface-2: #1e1e1d; --sunken: #141413;
+  --ink: #efefec; --ink-2: #b4b4af; --ink-3: #9c9c97; --line: #2c2c2a; --line-2: #3a3a37;
+  --axis: #474747; --grid: #262624;
+  --accent: #519ced; --accent-ink: #84b9f3; --accent-wash: #142336; --accent-track: #1d3554;
+  --s1: #338ced; --s2: #e76624; --s3: #00a888; --s4: #d28e05;
+  --good: #0aac23; --good-ink: #53c556; --good-wash: #10261a;
+  --warn: #fbb315; --warn-ink: #f3c45a; --warn-wash: #2b2412;
+  --crit: #dc3c3d; --crit-ink: #f07f80; --crit-wash: #301617;
+  --shadow: 0 1px 2px rgba(0,0,0,.4); --shadow-lg: 0 16px 40px rgba(0,0,0,.55);
+}
+
+/* ---------- base ---------- */
+* { box-sizing: border-box; }
+html, body { height: 100%; }
+body { margin: 0; font: 14px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; background: var(--page); color: var(--ink); -webkit-font-smoothing: antialiased; }
+a { color: var(--accent-ink); text-decoration: none; } a:hover { text-decoration: underline; }
+button, input, select, textarea { font: inherit; color: inherit; }
+code, .mono { font-family: ui-monospace, "Cascadia Code", Consolas, monospace; font-size: 12.5px; }
+.num { font-variant-numeric: tabular-nums; }
+.muted { color: var(--ink-3); } .small { font-size: 12.5px; }
+.sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 4px; }
+
+/* ---------- shell ---------- */
+.app { display: grid; grid-template-columns: 236px 1fr; min-height: 100vh; }
+.sidebar { background: var(--surface); border-right: 1px solid var(--line); display: flex; flex-direction: column; position: sticky; top: 0; height: 100vh; }
+.brand { display: flex; align-items: center; gap: 10px; padding: 18px 18px 14px; }
+.brand-mark { width: 28px; height: 28px; border-radius: 7px; background: var(--accent); display: grid; place-items: center; }
+.brand-name { font-weight: 650; font-size: 15.5px; letter-spacing: -.1px; }
+.brand-ver { margin-left: auto; font-size: 11px; color: var(--ink-3); border: 1px solid var(--line); border-radius: 20px; padding: 0 7px; }
+.nav { padding: 6px 10px; overflow-y: auto; flex: 1; }
+.nav-h { font-size: 11px; text-transform: uppercase; letter-spacing: .6px; color: var(--ink-3); padding: 14px 10px 6px; font-weight: 600; }
+.nav a { display: flex; align-items: center; gap: 10px; padding: 7px 10px; border-radius: 7px; color: var(--ink-2); font-weight: 500; text-decoration: none; }
+.nav a svg { width: 17px; height: 17px; flex: none; stroke: currentColor; }
+.nav a:hover { background: var(--sunken); color: var(--ink); }
+.nav a.on { background: var(--accent-wash); color: var(--accent-ink); }
+.nav .count { margin-left: auto; font-size: 11.5px; background: var(--accent); color: #fff; border-radius: 10px; padding: 0 7px; font-weight: 600; }
+.me { border-top: 1px solid var(--line); padding: 12px 14px; display: flex; align-items: center; gap: 10px; }
+.avatar { width: 30px; height: 30px; border-radius: 50%; background: var(--accent-wash); color: var(--accent-ink); display: grid; place-items: center; font-weight: 650; font-size: 12.5px; flex: none; }
+.me-name { font-weight: 600; font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.me-role { font-size: 11.5px; color: var(--ink-3); }
+.main { min-width: 0; display: flex; flex-direction: column; }
+.topbar { height: 56px; display: flex; align-items: center; gap: 12px; padding: 0 28px; border-bottom: 1px solid var(--line); background: var(--surface); position: sticky; top: 0; z-index: 5; }
+.crumbs { display: flex; align-items: center; gap: 8px; font-size: 13.5px; color: var(--ink-3); min-width: 0; }
+.crumbs b { color: var(--ink); font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.top-actions { margin-left: auto; display: flex; gap: 8px; align-items: center; }
+.env { font-size: 11.5px; font-weight: 600; padding: 2px 9px; border-radius: 20px; border: 1px solid var(--line-2); color: var(--ink-2); }
+.content { padding: 24px 28px 60px; max-width: 1360px; width: 100%; }
+.page-h { display: flex; align-items: flex-end; gap: 16px; margin-bottom: 20px; flex-wrap: wrap; }
+.page-h h1 { font-size: 21px; margin: 0; letter-spacing: -.2px; font-weight: 650; }
+.page-h p { margin: 3px 0 0; color: var(--ink-3); }
+.page-h .actions { margin-left: auto; display: flex; gap: 8px; flex-wrap: wrap; }
+
+/* ---------- components ---------- */
+.card { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); box-shadow: var(--shadow); }
+.card-h { display: flex; align-items: center; gap: 10px; padding: 14px 18px; border-bottom: 1px solid var(--line); }
+.card-h h2 { font-size: 14.5px; margin: 0; font-weight: 600; }
+.card-h .sub { color: var(--ink-3); font-size: 12.5px; }
+.card-h .right { margin-left: auto; display: flex; gap: 8px; align-items: center; }
+.card-b { padding: 16px 18px; }
+.grid { display: grid; gap: 16px; }
+.g-tiles { grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); }
+.g-2 { grid-template-columns: 2fr 1fr; } .g-2e { grid-template-columns: 1fr 1fr; }
+@media (max-width: 1100px) { .g-2, .g-2e { grid-template-columns: 1fr; } }
+.stack > * + * { margin-top: 16px; }
+
+.tile { padding: 16px 18px; }
+.tile-l { color: var(--ink-3); font-size: 12.5px; font-weight: 500; }
+.tile-v { font-size: 26px; font-weight: 650; letter-spacing: -.4px; margin-top: 4px; display: flex; align-items: baseline; gap: 8px; }
+.tile-d { font-size: 12.5px; font-weight: 600; }
+.tile-f { display: flex; align-items: flex-end; justify-content: space-between; gap: 8px; margin-top: 6px; color: var(--ink-3); font-size: 12px; }
+.up-good { color: var(--good-ink); } .down-bad { color: var(--crit-ink); }
+
+.btn { display: inline-flex; align-items: center; gap: 7px; height: 34px; padding: 0 14px; border-radius: 8px; border: 1px solid var(--line-2); background: var(--surface); cursor: pointer; font-weight: 550; white-space: nowrap; }
+.btn:hover { background: var(--sunken); text-decoration: none; }
+.btn svg { width: 16px; height: 16px; stroke: currentColor; }
+.btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+.btn.primary:hover { filter: brightness(1.07); }
+.btn.ghost { border-color: transparent; background: transparent; }
+.btn.ghost:hover { background: var(--sunken); }
+.btn.sm { height: 28px; padding: 0 10px; font-size: 13px; }
+.btn.icon { width: 34px; padding: 0; justify-content: center; }
+.btn:disabled { opacity: .5; cursor: default; }
+.input, select.input { height: 34px; border: 1px solid var(--line-2); border-radius: 8px; padding: 0 10px; background: var(--surface); min-width: 0; }
+.input:focus { outline: 2px solid var(--accent-track); border-color: var(--accent); }
+.search { position: relative; } .search svg { position: absolute; left: 10px; top: 9px; width: 16px; height: 16px; stroke: var(--ink-3); }
+.search .input { padding-left: 32px; width: 260px; }
+.filters { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; padding: 12px 18px; border-bottom: 1px solid var(--line); }
+.seg { display: inline-flex; border: 1px solid var(--line-2); border-radius: 8px; overflow: hidden; }
+.seg button { border: 0; background: var(--surface); padding: 0 12px; height: 32px; cursor: pointer; color: var(--ink-2); font-weight: 500; }
+.seg button + button { border-left: 1px solid var(--line-2); }
+.seg button.on { background: var(--accent-wash); color: var(--accent-ink); }
+
+.badge { display: inline-flex; align-items: center; gap: 5px; height: 22px; padding: 0 9px; border-radius: 20px; font-size: 12px; font-weight: 600; white-space: nowrap; border: 1px solid transparent; }
+.badge svg { width: 13px; height: 13px; }
+.b-good { background: var(--good-wash); color: var(--good-ink); }
+.b-bad { background: var(--crit-wash); color: var(--crit-ink); }
+.b-warn { background: var(--warn-wash); color: var(--warn-ink); }
+.b-info { background: var(--accent-wash); color: var(--accent-ink); }
+.b-mute { background: var(--sunken); color: var(--ink-2); border-color: var(--line); }
+.chip { display: inline-block; padding: 0 8px; border-radius: 6px; background: var(--sunken); border: 1px solid var(--line); font-size: 12px; color: var(--ink-2); margin: 0 4px 4px 0; }
+
+table.t { width: 100%; border-collapse: collapse; }
+.t th { text-align: left; font-size: 12px; font-weight: 600; color: var(--ink-3); padding: 9px 14px; border-bottom: 1px solid var(--line); background: var(--surface-2); white-space: nowrap; position: sticky; top: 0; }
+.t th.sortable { cursor: pointer; user-select: none; } .t th.sortable:hover { color: var(--ink); }
+.t td { padding: 10px 14px; border-bottom: 1px solid var(--line); vertical-align: middle; }
+.t tr:last-child td { border-bottom: 0; }
+.t tbody tr.click { cursor: pointer; } .t tbody tr.click:hover td { background: var(--surface-2); }
+.t td.r, .t th.r { text-align: right; }
+.t .wrap { max-width: 420px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.table-scroll { overflow-x: auto; }
+.empty { padding: 44px 20px; text-align: center; color: var(--ink-3); }
+.empty svg { width: 34px; height: 34px; stroke: var(--line-2); margin-bottom: 8px; }
+.empty b { display: block; color: var(--ink); margin-bottom: 4px; font-size: 14.5px; }
+
+.meter { display: flex; align-items: center; gap: 10px; }
+.meter .track { flex: 1; height: 6px; border-radius: 3px; background: var(--accent-track); overflow: hidden; min-width: 60px; }
+.meter .fill { height: 100%; border-radius: 3px; background: var(--accent); }
+.meter.bad .track { background: var(--crit-wash); } .meter.bad .fill { background: var(--crit); }
+.meter.warn .track { background: var(--warn-wash); } .meter.warn .fill { background: var(--warn); }
+.meter span { min-width: 42px; text-align: right; font-variant-numeric: tabular-nums; font-weight: 550; }
+
+.tabs { display: flex; gap: 2px; border-bottom: 1px solid var(--line); padding: 0 12px; }
+.tabs button { border: 0; background: none; padding: 12px 12px 10px; cursor: pointer; color: var(--ink-3); font-weight: 550; border-bottom: 2px solid transparent; margin-bottom: -1px; }
+.tabs button.on { color: var(--ink); border-bottom-color: var(--accent); }
+.tabs .n { font-size: 11.5px; background: var(--sunken); border-radius: 10px; padding: 0 6px; margin-left: 4px; color: var(--ink-2); }
+
+.banner { display: flex; gap: 12px; align-items: flex-start; padding: 12px 16px; border-radius: var(--radius); border: 1px solid; }
+.banner svg { width: 18px; height: 18px; flex: none; margin-top: 1px; }
+.banner.good { background: var(--good-wash); border-color: color-mix(in srgb, var(--good) 35%, transparent); color: var(--good-ink); }
+.banner.bad { background: var(--crit-wash); border-color: color-mix(in srgb, var(--crit) 35%, transparent); color: var(--crit-ink); }
+.banner.warn { background: var(--warn-wash); border-color: color-mix(in srgb, var(--warn) 45%, transparent); color: var(--warn-ink); }
+.banner.info { background: var(--accent-wash); border-color: color-mix(in srgb, var(--accent) 30%, transparent); color: var(--accent-ink); }
+.banner ul { margin: 4px 0 0; padding-left: 18px; color: var(--ink); }
+
+.progress { height: 8px; background: var(--accent-track); border-radius: 4px; overflow: hidden; }
+.progress > i { display: block; height: 100%; background: var(--accent); border-radius: 4px; transition: width .4s ease; }
+.pulse { width: 8px; height: 8px; border-radius: 50%; background: var(--accent); display: inline-block; animation: pulse 1.4s ease-in-out infinite; }
+@keyframes pulse { 50% { opacity: .3; } }
+
+.kv { display: grid; grid-template-columns: 170px 1fr; gap: 8px 16px; font-size: 13.5px; }
+.kv dt { color: var(--ink-3); } .kv dd { margin: 0; word-break: break-all; }
+
+/* drawer */
+.scrim { position: fixed; inset: 0; background: rgba(10,10,9,.35); z-index: 40; opacity: 0; pointer-events: none; transition: opacity .15s; }
+.scrim.on { opacity: 1; pointer-events: auto; }
+.drawer { position: fixed; top: 0; right: 0; bottom: 0; width: min(720px, 96vw); background: var(--surface); z-index: 41; box-shadow: var(--shadow-lg); transform: translateX(100%); transition: transform .2s ease; display: flex; flex-direction: column; }
+.drawer.on { transform: none; }
+.drawer-h { padding: 16px 20px; border-bottom: 1px solid var(--line); display: flex; gap: 10px; align-items: center; }
+.drawer-h h3 { margin: 0; font-size: 15.5px; }
+.drawer-b { padding: 18px 20px; overflow-y: auto; flex: 1; }
+.sec { margin-bottom: 20px; } .sec h4 { margin: 0 0 8px; font-size: 12px; text-transform: uppercase; letter-spacing: .5px; color: var(--ink-3); }
+.quote { background: var(--surface-2); border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; white-space: pre-wrap; word-break: break-word; font-size: 13.5px; }
+.step { border: 1px solid var(--line); border-radius: 8px; margin-bottom: 8px; overflow: hidden; }
+.step-h { display: flex; gap: 8px; align-items: center; padding: 8px 12px; background: var(--surface-2); font-weight: 600; font-size: 13px; }
+.step-b { padding: 8px 12px; font-size: 12.5px; white-space: pre-wrap; word-break: break-word; color: var(--ink-2); }
+
+/* modal & toast */
+.modal { position: fixed; inset: 0; display: grid; place-items: center; z-index: 50; background: rgba(10,10,9,.35); }
+.modal .card { width: min(460px, 94vw); box-shadow: var(--shadow-lg); }
+.field { display: grid; gap: 6px; margin-bottom: 14px; } .field label { font-weight: 550; font-size: 13px; }
+.field .hint { font-size: 12px; color: var(--ink-3); }
+.toasts { position: fixed; bottom: 20px; right: 20px; z-index: 60; display: grid; gap: 8px; }
+.toast { background: var(--ink); color: var(--surface); padding: 10px 14px; border-radius: 8px; box-shadow: var(--shadow-lg); max-width: 380px; font-size: 13.5px; }
+.toast.bad { background: var(--crit); color: #fff; }
+
+/* login */
+.login { min-height: 100vh; display: grid; place-items: center; padding: 20px; }
+.login .card { width: min(400px, 100%); padding: 28px; }
+.login h1 { font-size: 20px; margin: 16px 0 4px; }
+
+/* ---------- charts ---------- */
+.chart { position: relative; }
+.chart svg { display: block; width: 100%; overflow: visible; }
+.chart .gridline { stroke: var(--grid); stroke-width: 1; }
+.chart .baseline { stroke: var(--axis); stroke-width: 1; }
+.chart .tick { fill: var(--ink-3); font-size: 11px; font-variant-numeric: tabular-nums; }
+.chart .lbl { fill: var(--ink-2); font-size: 11.5px; font-weight: 600; }
+.chart .series { fill: none; stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; }
+.chart .dot { stroke: var(--surface); stroke-width: 2; }
+.chart .xhair { stroke: var(--ink-3); stroke-width: 1; stroke-dasharray: 3 3; }
+.chart .ci { stroke: var(--accent); stroke-width: 2; stroke-linecap: round; opacity: .45; }
+.chart .ci-dot { fill: var(--accent); stroke: var(--surface); stroke-width: 2; }
+.chart .hit { fill: transparent; cursor: default; }
+.chart .hit:hover + .row-bg, .chart .row-bg.hov { fill: var(--sunken); }
+.tip { position: absolute; pointer-events: none; background: var(--surface); border: 1px solid var(--line-2); box-shadow: var(--shadow-lg); border-radius: 8px; padding: 8px 10px; font-size: 12.5px; min-width: 140px; z-index: 4; display: none; }
+.tip .tip-h { color: var(--ink-3); margin-bottom: 4px; font-size: 11.5px; }
+.tip .tip-r { display: flex; align-items: center; gap: 8px; } .tip .tip-r b { font-variant-numeric: tabular-nums; }
+.tip .key { width: 14px; height: 2px; border-radius: 1px; flex: none; }
+.legend { display: flex; gap: 14px; flex-wrap: wrap; font-size: 12.5px; color: var(--ink-2); margin-bottom: 8px; }
+.legend span { display: inline-flex; align-items: center; gap: 6px; }
+.legend i { width: 14px; height: 2px; border-radius: 1px; display: inline-block; }
+.spark { display: block; }
 </style>
 </head>
 <body>
-<header>
-  <h1>evalkit</h1>
-  <nav id="nav">
-    <button data-v="runs" class="on">Runs</button>
-    <button data-v="jobs">Jobs</button>
-    <button data-v="monitoring">Monitoring</button>
-    <button data-v="plugins">Plugins</button>
-    <button data-v="audit">Audit</button>
-  </nav>
-  <div id="who"></div>
-</header>
-<main id="main"></main>
+<div id="root"></div>
+<div class="toasts" id="toasts" aria-live="polite"></div>
 <script>
-const $ = (s, el=document) => el.querySelector(s);
-const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
-let me = null;
+"use strict";
+/* ============================================================ utilities */
+const $ = (s, el = document) => el.querySelector(s);
+const $$ = (s, el = document) => [...el.querySelectorAll(s)];
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"}[c]));
+const ICON = {
+  overview: '<path d="M3 13h8V3H3zM13 21h8V11h-8zM3 21h8v-6H3zM13 3v6h8V3z"/>',
+  runs: '<path d="M4 6h16M4 12h16M4 18h10"/>',
+  compare: '<path d="M8 3v18M16 3v18M3 8h5M16 16h5"/>',
+  jobs: '<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>',
+  data: '<ellipse cx="12" cy="5.5" rx="8" ry="3"/><path d="M4 5.5v13c0 1.7 3.6 3 8 3s8-1.3 8-3v-13M4 12c0 1.7 3.6 3 8 3s8-1.3 8-3"/>',
+  monitor: '<path d="M3 12h4l3-8 4 16 3-8h4"/>',
+  plugins: '<path d="M9 3v4M15 3v4M7 7h10v5a5 5 0 0 1-10 0zM12 17v4"/>',
+  audit: '<path d="M12 3l8 3v6c0 4.5-3.4 8.3-8 9-4.6-.7-8-4.5-8-9V6z"/><path d="M9 12l2 2 4-4"/>',
+  search: '<circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/>',
+  sun: '<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/>',
+  moon: '<path d="M20 14.5A8 8 0 0 1 9.5 4 8 8 0 1 0 20 14.5z"/>',
+  refresh: '<path d="M20 11a8 8 0 1 0-2.3 5.7M20 4v7h-7"/>',
+  play: '<path d="M7 4l13 8-13 8z"/>',
+  check: '<path d="M5 12.5l4.5 4.5L19 7.5"/>',
+  x: '<path d="M6 6l12 12M18 6L6 18"/>',
+  alert: '<path d="M12 3l10 18H2z"/><path d="M12 10v5M12 18v.5"/>',
+  info: '<circle cx="12" cy="12" r="9"/><path d="M12 11v6M12 7.5v.5"/>',
+  download: '<path d="M12 4v11M7 10l5 5 5-5M5 20h14"/>',
+  upload: '<path d="M12 20V9M7 14l5-5 5 5M5 4h14"/>',
+  logout: '<path d="M15 4h4v16h-4M10 8l-4 4 4 4M6 12h10"/>',
+  table: '<path d="M3 5h18v14H3zM3 10h18M9 5v14"/>',
+  chart: '<path d="M4 19h16M6 15l4-5 4 3 5-7"/>',
+  lock: '<rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/>',
+  empty: '<path d="M4 7h16l-2 13H6zM9 7V4h6v3"/>',
+};
+const icon = (n, cls = "") => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" class="${cls}" aria-hidden="true">${ICON[n] || ""}</svg>`;
+const pct = v => v == null ? "–" : (v * 100).toFixed(v === 1 || v === 0 ? 0 : 1) + "%";
+const fix = (v, d = 2) => v == null ? "–" : (Math.round(v * 10 ** d) / 10 ** d).toLocaleString();
+const compact = v => v == null ? "–" : v >= 1e6 ? (v / 1e6).toFixed(1) + "M" : v >= 1e4 ? (v / 1e3).toFixed(1) + "K" : Math.round(v).toLocaleString();
+const RATE = new Set(["task_success", "correctness", "faithfulness", "relevance", "injection_resisted", "abstention", "over_abstention",
+  "source_recall", "source_mrr", "number_match", "answer_contains", "tool_selection", "status_agreement", "error", "access_violation", "forbidden_text_absent", "gave_up"]);
+const LOWER_BETTER = new Set(["error", "over_abstention", "access_violation", "latency_s", "total_tokens", "cost_usd", "steps", "gave_up"]);
+const LABEL = {task_success: "Task success", correctness: "Correctness", faithfulness: "Faithfulness", relevance: "Relevance",
+  injection_resisted: "Injection resisted", abstention: "Abstention", over_abstention: "Wrongly gave up", source_recall: "Source recall",
+  source_mrr: "Source MRR", number_match: "Number match", answer_contains: "Answer contains", tool_selection: "Tool selection",
+  status_agreement: "Status agreement", error: "Errors", access_violation: "Access violations", latency_s: "Latency",
+  total_tokens: "Tokens", cost_usd: "Cost", steps: "Steps", forbidden_text_absent: "Forbidden text absent", gave_up: "Gave up"};
+const lab = m => LABEL[m] || m.replace(/_/g, " ");
+const fmtMetric = (m, v) => v == null ? "–" : RATE.has(m) ? pct(v) : m === "latency_s" ? fix(v, 1) + " s" : m === "cost_usd" ? "$" + fix(v, 4) : compact(v);
+function runTime(r) {
+  const t = r.started_at || r.created_at || r.timestamp;
+  if (t) return new Date(t);
+  const m = (r.run_id || "").match(/(\d{8})-(\d{6})$/);
+  return m ? new Date(`${m[1].slice(0,4)}-${m[1].slice(4,6)}-${m[1].slice(6)}T${m[2].slice(0,2)}:${m[2].slice(2,4)}:${m[2].slice(4)}`) : null;
+}
+function ago(d) {
+  if (!d || isNaN(d)) return "–";
+  const s = (Date.now() - d) / 1000;
+  if (s < 60) return "just now"; if (s < 3600) return Math.floor(s / 60) + " min ago";
+  if (s < 86400) return Math.floor(s / 3600) + " h ago"; if (s < 86400 * 7) return Math.floor(s / 86400) + " d ago";
+  return d.toLocaleDateString();
+}
+const fullTime = d => d && !isNaN(d) ? d.toLocaleString() : "";
+function toast(msg, bad = false) {
+  const el = document.createElement("div"); el.className = "toast" + (bad ? " bad" : ""); el.textContent = msg;
+  $("#toasts").appendChild(el); setTimeout(() => el.remove(), 4500);
+}
+const gateBadge = g => g === "PASSED" ? `<span class="badge b-good">${icon("check")}Passed</span>`
+  : g === "FAILED" ? `<span class="badge b-bad">${icon("x")}Failed</span>` : `<span class="badge b-mute">No gates</span>`;
+function statusBadge(s) {
+  const m = {running: ["b-info", '<span class="pulse"></span>Running'], complete: ["b-mute", "Complete"], incomplete: ["b-warn", icon("alert") + "Incomplete"],
+    prepared: ["b-mute", "Prepared"], "shard-complete": ["b-mute", "Shard done"], queued: ["b-mute", "Queued"], finished: ["b-good", icon("check") + "Finished"], failed: ["b-bad", icon("x") + "Failed"]};
+  const [c, t] = m[s] || ["b-mute", esc(s || "Complete")];
+  return `<span class="badge ${c}">${t}</span>`;
+}
+function meter(v, m = "task_success") {
+  if (v == null) return '<span class="muted">–</span>';
+  const bad = LOWER_BETTER.has(m) ? v > 0 : v < 0.8;
+  const cls = LOWER_BETTER.has(m) ? (v > 0 ? "bad" : "") : (v < 0.6 ? "bad" : v < 0.8 ? "warn" : "");
+  const w = Math.max(0, Math.min(1, v)) * 100;
+  return `<div class="meter ${cls}" title="${esc(lab(m))}: ${pct(v)}"><div class="track"><div class="fill" style="width:${w}%"></div></div><span>${pct(v)}</span></div>`;
+}
 
-async function api(path, opts={}) {
-  const r = await fetch(path, {credentials:"same-origin", ...opts, headers:{"Content-Type":"application/json", ...(opts.headers||{})}});
-  if (r.status === 401) { renderLogin(); throw new Error("authentication required"); }
+/* ============================================================ API */
+const state = {me: null, apiKey: sessionStorage.getItem("evalkit_key") || "", runs: null, timers: []};
+async function api(path, opts = {}) {
+  const headers = {"Content-Type": "application/json", ...(opts.headers || {})};
+  if (state.apiKey) headers["x-api-key"] = state.apiKey;
+  const r = await fetch(path, {credentials: "same-origin", ...opts, headers});
+  if (r.status === 401) { state.me = null; renderLogin(); throw new Error("Sign-in required"); }
   const ct = r.headers.get("content-type") || "";
   const body = ct.includes("json") ? await r.json() : await r.text();
-  if (!r.ok) throw new Error(body.error || r.statusText);
+  if (!r.ok) throw new Error((body && body.error) || r.statusText);
   return body;
 }
+const can = perm => {
+  const roles = state.me?.roles || [];
+  const P = {viewer: ["read"], ingest: ["ingest"], runner: ["read", "run", "datasets"], admin: ["read", "run", "datasets", "delete", "audit"]};
+  return roles.some(r => (P[r] || []).includes(perm));
+};
+function clearTimers() { state.timers.forEach(clearInterval); state.timers = []; }
 
-function renderLogin() {
-  $("#main").innerHTML = `<div class="panel"><p>Sign in to view evaluations.</p><a class="btn" href="/auth/login">Sign in with your organization</a></div>`;
-}
+/* ============================================================ charts */
+const SERIES = ["var(--s1)", "var(--s2)", "var(--s3)", "var(--s4)"];
+function niceMax(v) { if (v <= 1) return 1; const p = 10 ** Math.floor(Math.log10(v)); return Math.ceil(v / p) * p; }
 
-// Minimal, safe markdown (escaped first): headings, tables, lists, bold, code.
-function md(text) {
-  const lines = esc(text).split("\n"); let html = "", i = 0;
-  const inline = s => s.replace(/\*\*(.+?)\*\*/g, "<b>$1</b>").replace(/`([^`]+)`/g, "<code>$1</code>");
-  while (i < lines.length) {
-    const l = lines[i];
-    if (/^\|/.test(l)) {
-      const rows = []; while (i < lines.length && /^\|/.test(lines[i])) rows.push(lines[i++]);
-      const cells = r => r.replace(/^\||\|$/g, "").split("|").map(c => c.trim());
-      html += "<table><tr>" + cells(rows[0]).map(c => `<th>${inline(c)}</th>`).join("") + "</tr>";
-      rows.slice(2).forEach(r => html += "<tr>" + cells(r).map(c => `<td>${inline(c)}</td>`).join("") + "</tr>");
-      html += "</table>"; continue;
-    }
-    const h = l.match(/^(#{1,3}) (.*)/);
-    if (h) html += `<h${h[1].length}>${inline(h[2])}</h${h[1].length}>`;
-    else if (/^\s*- /.test(l)) html += `<div>• ${inline(l.replace(/^\s*- /, ""))}</div>`;
-    else if (l.trim()) html += `<p>${inline(l)}</p>`;
-    i++;
+/** Line chart with crosshair tooltip, direct end labels, legend (>=2 series), table toggle.
+ *  series: [{name, points: [{x: Date, y: number, meta}]}] */
+function lineChart(el, series, {height = 240, yFmt = pct, yMax = null, rate = true} = {}) {
+  series = series.filter(s => s.points.length);
+  if (!series.length) { el.innerHTML = `<div class="empty">${icon("chart")}<b>No data yet</b>Runs will appear here.</div>`; return; }
+  const W = Math.max(320, el.clientWidth || 640), H = height, m = {l: 44, r: 124, t: 12, b: 26};
+  const xs = series.flatMap(s => s.points.map(p => +p.x)), ys = series.flatMap(s => s.points.map(p => p.y));
+  let x0 = Math.min(...xs), x1 = Math.max(...xs); if (x0 === x1) { x0 -= 3600e3; x1 += 3600e3; }
+  const y1 = yMax ?? (rate ? 1 : niceMax(Math.max(...ys) * 1.1)), y0 = 0;
+  const X = x => m.l + (x - x0) / (x1 - x0) * (W - m.l - m.r), Y = y => m.t + (1 - (y - y0) / (y1 - y0)) * (H - m.t - m.b);
+  const ticks = [0, .25, .5, .75, 1].map(f => y0 + f * (y1 - y0));
+  const nx = Math.min(5, new Set(xs).size);
+  const xt = Array.from({length: nx}, (_, i) => x0 + (nx === 1 ? .5 : i / (nx - 1)) * (x1 - x0));
+  const span = x1 - x0, df = span > 3 * 864e5 ? {month: "short", day: "numeric"} : {hour: "2-digit", minute: "2-digit"};
+  let svg = `<svg viewBox="0 0 ${W} ${H}" height="${H}" role="img" aria-label="${esc(series.map(s => s.name).join(", "))} over time">`;
+  ticks.forEach(t => svg += `<line class="gridline" x1="${m.l}" x2="${W - m.r}" y1="${Y(t)}" y2="${Y(t)}"/><text class="tick" x="${m.l - 8}" y="${Y(t) + 4}" text-anchor="end">${esc(yFmt(t))}</text>`);
+  svg += `<line class="baseline" x1="${m.l}" x2="${W - m.r}" y1="${Y(y0)}" y2="${Y(y0)}"/>`;
+  xt.forEach(t => svg += `<text class="tick" x="${X(t)}" y="${H - 6}" text-anchor="middle">${esc(new Date(t).toLocaleString([], df))}</text>`);
+  const labelYs = [];
+  series.forEach((s, i) => {
+    const pts = [...s.points].sort((a, b) => a.x - b.x), c = SERIES[i % SERIES.length];
+    svg += `<path class="series" stroke="${c}" d="${pts.map((p, j) => (j ? "L" : "M") + X(+p.x).toFixed(1) + "," + Y(p.y).toFixed(1)).join("")}"/>`;
+    pts.forEach(p => svg += `<circle class="dot" cx="${X(+p.x)}" cy="${Y(p.y)}" r="4" fill="${c}"/>`);
+    const last = pts[pts.length - 1]; let ly = Y(last.y) + 4;
+    while (labelYs.some(v => Math.abs(v - ly) < 13)) ly += 13; labelYs.push(ly);
+    svg += `<text class="lbl" x="${X(+last.x) + 8}" y="${ly}">${esc(s.name.length > 17 ? s.name.slice(0, 16) + "…" : s.name)}</text>`;
+  });
+  svg += `<line class="xhair" y1="${m.t}" y2="${H - m.b}" style="display:none"/><rect class="hit" x="${m.l}" y="${m.t}" width="${W - m.l - m.r}" height="${H - m.t - m.b}" tabindex="0"/></svg>`;
+  const legend = series.length > 1 ? `<div class="legend">${series.map((s, i) => `<span><i style="background:${SERIES[i % 4]}"></i>${esc(s.name)}</span>`).join("")}</div>` : "";
+  el.innerHTML = `${legend}<div class="chart">${svg}<div class="tip"></div></div>`;
+  const root = $(".chart", el), tip = $(".tip", root), xh = $(".xhair", root), hit = $(".hit", root), svgEl = $("svg", root);
+  const allX = [...new Set(xs)].sort((a, b) => a - b);
+  function show(px) {
+    const rect = svgEl.getBoundingClientRect(), sx = (px - rect.left) * W / rect.width;
+    const xv = x0 + (sx - m.l) / (W - m.l - m.r) * (x1 - x0);
+    const near = allX.reduce((a, b) => Math.abs(b - xv) < Math.abs(a - xv) ? b : a);
+    xh.setAttribute("x1", X(near)); xh.setAttribute("x2", X(near)); xh.style.display = "";
+    tip.replaceChildren();
+    const h = document.createElement("div"); h.className = "tip-h"; h.textContent = new Date(near).toLocaleString(); tip.appendChild(h);
+    series.forEach((s, i) => {
+      const p = s.points.find(q => +q.x === near); if (!p) return;
+      const r = document.createElement("div"); r.className = "tip-r";
+      const k = document.createElement("i"); k.className = "key"; k.style.background = SERIES[i % 4];
+      const b = document.createElement("b"); b.textContent = yFmt(p.y);
+      const n = document.createElement("span"); n.className = "muted"; n.textContent = s.name + (p.meta ? " · " + p.meta : "");
+      r.append(k, b, n); tip.appendChild(r);
+    });
+    tip.style.display = "block";
+    const left = X(near) / W * rect.width;
+    tip.style.left = Math.min(left + 12, rect.width - tip.offsetWidth - 4) + "px"; tip.style.top = "8px";
   }
-  return html;
+  hit.addEventListener("pointermove", e => show(e.clientX));
+  hit.addEventListener("pointerleave", () => { tip.style.display = "none"; xh.style.display = "none"; });
+  hit.addEventListener("focus", () => { const r = svgEl.getBoundingClientRect(); show(r.right - 4); });
+  hit.addEventListener("blur", () => { tip.style.display = "none"; xh.style.display = "none"; });
 }
 
-const fmt = v => v === null || v === undefined ? "–" : (typeof v === "number" ? (Math.round(v * 1000) / 1000) : esc(v));
+/** Dot + 95% interval per metric on a 0–100% scale (one series: no legend). */
+function intervalChart(el, rows) {
+  if (!rows.length) { el.innerHTML = `<div class="empty">No rate metrics.</div>`; return; }
+  const W = Math.max(360, el.clientWidth || 640), rowH = 30, m = {l: 150, r: 64, t: 8, b: 26}, H = m.t + m.b + rows.length * rowH;
+  const X = v => m.l + v * (W - m.l - m.r);
+  let svg = `<svg viewBox="0 0 ${W} ${H}" height="${H}" role="img" aria-label="Metric scores with 95% confidence intervals">`;
+  [0, .25, .5, .75, 1].forEach(t => svg += `<line class="gridline" x1="${X(t)}" x2="${X(t)}" y1="${m.t}" y2="${H - m.b}"/><text class="tick" x="${X(t)}" y="${H - 8}" text-anchor="middle">${t * 100}%</text>`);
+  rows.forEach((r, i) => {
+    const ci = r.ci95 || r.ci, cy = m.t + i * rowH + rowH / 2, lo = ci ? ci[0] : r.mean, hi = ci ? ci[1] : r.mean;
+    svg += `<rect class="row-bg" x="0" y="${cy - rowH / 2}" width="${W}" height="${rowH}" fill="transparent" rx="4"/>`;
+    svg += `<text class="tick" x="${m.l - 12}" y="${cy + 4}" text-anchor="end" style="fill:var(--ink-2);font-size:12px">${esc(lab(r.metric))}${LOWER_BETTER.has(r.metric) ? " ↓" : ""}</text>`;
+    if (hi > lo) svg += `<line class="ci" x1="${X(lo)}" x2="${X(hi)}" y1="${cy}" y2="${cy}"/>`;
+    svg += `<circle class="ci-dot" cx="${X(r.mean)}" cy="${cy}" r="5"/>`;
+    svg += `<text class="tick" x="${W - m.r + 10}" y="${cy + 4}" style="fill:var(--ink);font-weight:600">${pct(r.mean)}</text>`;
+    svg += `<rect class="hit" data-i="${i}" x="0" y="${cy - rowH / 2}" width="${W}" height="${rowH}" tabindex="0"/>`;
+  });
+  svg += `</svg>`;
+  el.innerHTML = `<div class="chart">${svg}<div class="tip"></div></div>`;
+  const root = $(".chart", el), tip = $(".tip", root), svgEl = $("svg", root), bgs = $$(".row-bg", root);
+  $$(".hit", root).forEach(h => {
+    const on = () => {
+      const r = rows[+h.dataset.i], rect = svgEl.getBoundingClientRect();
+      bgs.forEach((b, j) => b.classList.toggle("hov", j === +h.dataset.i));
+      tip.replaceChildren();
+      const t = document.createElement("div"); t.className = "tip-h"; t.textContent = lab(r.metric); tip.appendChild(t);
+      const v = document.createElement("div"); v.className = "tip-r"; const b = document.createElement("b"); b.textContent = pct(r.mean);
+      const s = document.createElement("span"); s.className = "muted"; const ci = r.ci95 || r.ci; s.textContent = `n=${r.n}` + (ci ? ` · 95% CI ${pct(ci[0])}–${pct(ci[1])}` : "");
+      v.append(b, s); tip.appendChild(v); tip.style.display = "block";
+      tip.style.left = Math.min(X(r.mean) / W * rect.width + 12, rect.width - tip.offsetWidth - 4) + "px";
+      tip.style.top = (+h.getAttribute("y") / H * rect.height + 30) + "px";
+    };
+    const off = () => { tip.style.display = "none"; bgs.forEach(b => b.classList.remove("hov")); };
+    h.addEventListener("pointerenter", on); h.addEventListener("focus", on);
+    h.addEventListener("pointerleave", off); h.addEventListener("blur", off);
+  });
+}
 
-async function viewRuns() {
-  const [runs, cfgs] = await Promise.all([api("/api/v1/runs"), api("/api/v1/configs").catch(() => ({configs: []}))]);
-  const canRun = me && me.roles.some(r => r === "runner" || r === "admin");
-  $("#main").innerHTML = `
-    ${canRun ? `<div class="panel row"><b>Start a run</b>
-      <select id="cfg">${cfgs.configs.map(c => `<option>${esc(c)}</option>`).join("")}</select>
-      <input id="lim" type="number" min="1" placeholder="limit (optional)" style="width:140px">
-      <button class="btn" id="go" ${cfgs.configs.length ? "" : "disabled"}>Run</button><span id="msg" class="muted"></span></div>` : ""}
-    <div class="panel"><table><tr><th>Run</th><th>Status</th><th>Gates</th><th>Task success</th><th>Correctness</th>
-      <th>Injection resisted</th><th>Access violations</th><th>Errors</th><th>Dataset</th></tr>
-      ${runs.runs.map(r => `<tr class="click" data-id="${esc(r.run_id)}"><td>${esc(r.run_id)}</td>
-        <td>${esc(r.status || "legacy")}</td>
-        <td>${r.gates ? `<span class="pill ${r.gates === "PASSED" ? "ok" : "bad"}">${r.gates}</span>` : "–"}</td>
-        <td>${fmt(r.headline?.task_success)}</td><td>${fmt(r.headline?.correctness)}</td>
-        <td>${fmt(r.headline?.injection_resisted)}</td><td>${fmt(r.headline?.access_violation)}</td>
-        <td>${fmt(r.headline?.error)}</td><td class="muted">${esc((r.dataset_sha256 || "").slice(0, 10))}</td></tr>`).join("")
-        || `<tr><td colspan="9" class="muted">No runs yet.</td></tr>`}
-    </table></div><div class="panel" id="report" hidden></div>`;
-  document.querySelectorAll("tr.click").forEach(tr => tr.onclick = () => showReport(tr.dataset.id));
-  if (canRun && $("#go")) $("#go").onclick = async () => {
-    const body = {config: $("#cfg").value}; if ($("#lim").value) body.limit = +$("#lim").value;
-    try { const j = await api("/api/v1/runs", {method:"POST", body: JSON.stringify(body)});
-          $("#msg").textContent = `queued job ${j.job} (run ${j.run_id})`; }
-    catch (e) { $("#msg").innerHTML = `<span class="err">${esc(e.message)}</span>`; }
+function sparkline(values, w = 96, h = 28) {
+  const v = values.filter(x => x != null); if (v.length < 2) return "";
+  const lo = Math.min(...v), hi = Math.max(...v), r = hi - lo || 1;
+  const pts = v.map((y, i) => [i / (v.length - 1) * (w - 4) + 2, h - 3 - (y - lo) / r * (h - 6)]);
+  const last = pts[pts.length - 1];
+  return `<svg class="spark" width="${w}" height="${h}" aria-hidden="true"><path d="${pts.map((p, i) => (i ? "L" : "M") + p[0].toFixed(1) + "," + p[1].toFixed(1)).join("")}" fill="none" stroke="var(--ink-3)" stroke-width="1.5" opacity=".7"/><circle cx="${last[0]}" cy="${last[1]}" r="3" fill="var(--accent)"/></svg>`;
+}
+function tableToggle(card, renderChart, renderTable) {
+  const btn = $(".js-toggle", card), body = $(".js-viz", card); let asTable = false;
+  const draw = () => { if (asTable) body.innerHTML = renderTable(); else renderChart(body); btn.innerHTML = icon(asTable ? "chart" : "table") + (asTable ? "Chart" : "Table"); };
+  btn.onclick = () => { asTable = !asTable; draw(); }; draw();
+}
+
+/* ============================================================ shell */
+const NAV = [
+  ["Evaluate", [["overview", "Overview", "#/"], ["runs", "Runs", "#/runs"], ["compare", "Compare", "#/compare"], ["jobs", "Jobs", "#/jobs"]]],
+  ["Data", [["data", "Datasets", "#/datasets"], ["monitor", "Monitoring", "#/monitoring"]]],
+  ["Platform", [["plugins", "Plugins", "#/plugins"], ["audit", "Audit log", "#/audit"]]],
+];
+function shell() {
+  const me = state.me, init = (me.name || "?").split(/[\s@._-]/).filter(Boolean).slice(0, 2).map(s => s[0].toUpperCase()).join("");
+  $("#root").innerHTML = `<div class="app">
+    <aside class="sidebar">
+      <div class="brand"><div class="brand-mark"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg></div>
+        <span class="brand-name">evalkit</span><span class="brand-ver" id="ver"></span></div>
+      <nav class="nav" aria-label="Main">${NAV.map(([h, items]) => `<div class="nav-h">${h}</div>` + items.map(([ic, name, href]) =>
+        `<a href="${href}" data-nav="${href}">${icon(ic)}<span>${name}</span>${name === "Jobs" ? '<span class="count" id="jobcount" hidden></span>' : ""}</a>`).join("")).join("")}</nav>
+      <div class="me"><div class="avatar">${esc(init)}</div><div style="min-width:0;flex:1"><div class="me-name" title="${esc(me.name)}">${esc(me.name)}</div>
+        <div class="me-role">${esc((me.roles || []).join(", ") || "no role")}</div></div>
+        ${me.mode !== "none" ? `<a class="btn ghost icon sm" href="${me.mode === "oidc" ? "/auth/logout" : "#"}" id="signout" title="Sign out">${icon("logout")}</a>` : ""}</div>
+    </aside>
+    <div class="main">
+      <header class="topbar"><div class="crumbs" id="crumbs"></div>
+        <div class="top-actions">
+          <span class="env" title="Authentication mode">${me.mode === "none" ? "Local" : me.mode === "oidc" ? "SSO" : "API key"}</span>
+          <button class="btn ghost icon" id="refresh" title="Refresh">${icon("refresh")}</button>
+          <button class="btn ghost icon" id="theme" title="Toggle theme"></button>
+        </div></header>
+      <main class="content" id="view"></main>
+    </div></div>
+    <div class="scrim" id="scrim"></div><aside class="drawer" id="drawer" aria-hidden="true"></aside>`;
+  api("/healthz").then(h => $("#ver").textContent = "v" + h.version).catch(() => {});
+  $("#refresh").onclick = () => route();
+  setThemeIcon(); $("#theme").onclick = toggleTheme;
+  $("#scrim").onclick = closeDrawer;
+  const so = $("#signout"); if (so && me.mode === "api_key") so.onclick = e => { e.preventDefault(); sessionStorage.removeItem("evalkit_key"); state.apiKey = ""; renderLogin(); };
+  pollJobs();
+}
+function crumbs(...parts) {
+  $("#crumbs").innerHTML = parts.map((p, i) => i === parts.length - 1 ? `<b>${esc(p[0])}</b>` : `<a href="${p[1]}">${esc(p[0])}</a><span>/</span>`).join("");
+}
+function setNav(href) { $$(".nav a").forEach(a => a.classList.toggle("on", a.dataset.nav === href)); }
+function setThemeIcon() {
+  const dark = document.documentElement.dataset.theme === "dark" || (!document.documentElement.dataset.theme && matchMedia("(prefers-color-scheme: dark)").matches);
+  $("#theme").innerHTML = icon(dark ? "sun" : "moon");
+}
+function toggleTheme() {
+  const cur = document.documentElement.dataset.theme || (matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
+  const next = cur === "dark" ? "light" : "dark";
+  document.documentElement.dataset.theme = next; localStorage.setItem("evalkit_theme", next); setThemeIcon(); route();
+}
+function openDrawer(html) { const d = $("#drawer"); d.innerHTML = html; d.classList.add("on"); d.setAttribute("aria-hidden", "false"); $("#scrim").classList.add("on"); $(".js-close", d)?.addEventListener("click", closeDrawer); }
+function closeDrawer() { $("#drawer").classList.remove("on"); $("#drawer").setAttribute("aria-hidden", "true"); $("#scrim").classList.remove("on"); }
+document.addEventListener("keydown", e => { if (e.key === "Escape") { closeDrawer(); $(".modal")?.remove(); } });
+async function pollJobs() {
+  const tick = async () => {
+    try { const j = await api("/api/v1/jobs"); const n = j.jobs.filter(x => x.status === "running" || x.status === "queued").length;
+      const c = $("#jobcount"); if (c) { c.hidden = !n; c.textContent = n; } } catch { /* ignore */ }
+  };
+  tick(); setInterval(tick, 5000);
+}
+
+/* ============================================================ login */
+async function renderLogin() {
+  clearTimers();
+  let mode = "oidc";
+  try { const r = await fetch("/api/v1/me", {credentials: "same-origin"}); mode = (await r.json()).mode || mode; } catch { /* */ }
+  $("#root").innerHTML = `<div class="login"><div class="card">
+    <div class="brand-mark" style="width:40px;height:40px;border-radius:10px"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg></div>
+    <h1>Sign in to evalkit</h1><p class="muted" style="margin:0 0 20px">Evaluation results are restricted to your organization.</p>
+    ${mode === "oidc" ? `<a class="btn primary" style="width:100%;justify-content:center;height:40px" href="/auth/login">${icon("lock")}Continue with single sign-on</a>`
+      : `<form id="keyform"><div class="field"><label for="key">API key</label><input class="input" id="key" type="password" autocomplete="off" required>
+         <span class="hint">Issued by your evalkit administrator. Kept for this browser tab only.</span></div>
+         <button class="btn primary" style="width:100%;justify-content:center;height:40px">Sign in</button><p class="small" id="kerr" style="color:var(--crit-ink)"></p></form>`}
+  </div></div>`;
+  const f = $("#keyform");
+  if (f) f.onsubmit = async e => {
+    e.preventDefault(); state.apiKey = $("#key").value.trim();
+    try { const me = await api("/api/v1/me"); sessionStorage.setItem("evalkit_key", state.apiKey); state.me = me; shell(); route(); }
+    catch { state.apiKey = ""; $("#kerr").textContent = "That key was not accepted."; }
   };
 }
 
-async function showReport(id) {
-  const box = $("#report"); box.hidden = false; box.innerHTML = "Loading…";
-  try { box.innerHTML = md(await api(`/api/v1/runs/${encodeURIComponent(id)}/artifacts/report.md`)); }
-  catch (e) { box.innerHTML = `<span class="err">${esc(e.message)}</span>`; }
-  box.scrollIntoView({behavior: "smooth"});
+/* ============================================================ data helpers */
+async function loadRuns(force = false) {
+  if (!state.runs || force) state.runs = (await api("/api/v1/runs")).runs.map(r => ({...r, t: runTime(r)})).sort((a, b) => (b.t || 0) - (a.t || 0));
+  return state.runs;
+}
+function deltaHtml(cur, prev, m) {
+  if (cur == null || prev == null) return "";
+  const d = cur - prev; if (Math.abs(d) < 1e-9) return `<span class="tile-d muted">no change</span>`;
+  const good = LOWER_BETTER.has(m) ? d < 0 : d > 0;
+  return `<span class="tile-d ${good ? "up-good" : "down-bad"}">${d > 0 ? "▲" : "▼"} ${RATE.has(m) ? (Math.abs(d) * 100).toFixed(1) + " pts" : fix(Math.abs(d), 1)}</span>`;
+}
+
+/* ============================================================ views */
+async function viewOverview() {
+  crumbs(["Overview"]); setNav("#/");
+  const [runs, mon, jobs] = await Promise.all([loadRuns(true), api("/api/v1/monitoring").catch(() => ({windows: []})), api("/api/v1/jobs").catch(() => ({jobs: []}))]);
+  const scored = runs.filter(r => r.headline);
+  // headline tiles use the latest run that has the metric (retrieval-only runs have no task success)
+  const withTS = scored.filter(r => r.headline.task_success != null);
+  const latest = withTS[0], prev = latest ? withTS.find(r => r !== latest && r.name === latest.name) : null;
+  const withInj = scored.filter(r => r.headline.injection_resisted != null);
+  const latInj = withInj[0], prevInj = latInj ? withInj.find(r => r !== latInj && r.name === latInj.name) : null;
+  const recent = scored.slice(0, 20), passRate = recent.length ? recent.filter(r => r.gates === "PASSED").length / recent.length : null;
+  const series = name => scored.filter(r => r.name === name).reverse();
+  const lastWin = mon.windows[mon.windows.length - 1];
+  const active = jobs.jobs.filter(j => j.status === "running" || j.status === "queued").length + runs.filter(r => r.status === "running").length;
+  const v = $("#view");
+  v.innerHTML = `<div class="page-h"><div><h1>Overview</h1><p>Quality, safety and reliability across every evaluated system.</p></div>
+      <div class="actions">${can("run") ? `<button class="btn primary" id="newrun">${icon("play")}New run</button>` : ""}</div></div>
+    <div class="grid g-tiles" style="margin-bottom:16px">
+      ${tile("Latest task success", latest ? pct(latest.headline.task_success) : "–", deltaHtml(latest?.headline.task_success, prev?.headline.task_success, "task_success"),
+        latest ? `<span>${esc(latest.name)} · ${ago(latest.t)}</span>${sparkline(series(latest.name).map(r => r.headline.task_success))}` : "No runs yet")}
+      ${tile("Gate pass rate", passRate == null ? "–" : pct(passRate), "", `<span>last ${recent.length} run${recent.length === 1 ? "" : "s"}</span>`)}
+      ${tile("Injection resisted", latInj ? pct(latInj.headline.injection_resisted) : "–",
+        deltaHtml(latInj?.headline.injection_resisted, prevInj?.headline.injection_resisted, "injection_resisted"),
+        latInj ? `<span>${esc(latInj.name)} · ${ago(latInj.t)}</span>` : "<span>no attack tests yet</span>")}
+      ${tile("Monitoring alerts", lastWin ? String((lastWin.alerts || []).length) : "–", "",
+        `<span>${lastWin ? "window ending " + ago(new Date(lastWin.window_end)) : "no live traffic monitored"}</span>`)}
+      ${tile("Runs", String(runs.length), "", `<span>${active ? `<span class="pulse"></span> ${active} active` : "none active"}</span>`)}
+    </div>
+    <div class="grid g-2">
+      <div class="card" id="trend"><div class="card-h"><h2>Task success over time</h2><span class="sub">per evaluation config</span>
+        <div class="right"><button class="btn sm js-toggle"></button></div></div><div class="card-b js-viz"></div></div>
+      <div class="card"><div class="card-h"><h2>Needs attention</h2></div><div class="card-b" id="attention"></div></div>
+    </div>
+    <div class="card" style="margin-top:16px"><div class="card-h"><h2>Recent runs</h2><div class="right"><a class="btn sm" href="#/runs">View all</a></div></div>
+      <div class="table-scroll">${runsTable(runs.slice(0, 8))}</div></div>`;
+  const names = [...new Set(scored.map(r => r.name))].slice(0, 4);
+  const trendSeries = names.map(n => ({name: n, points: series(n).filter(r => r.headline.task_success != null && r.t).map(r => ({x: r.t, y: r.headline.task_success, meta: r.gates === "FAILED" ? "gates failed" : ""}))}));
+  tableToggle($("#trend"), body => lineChart(body, trendSeries), () => `<table class="t"><thead><tr><th>Config</th><th>Run</th><th>When</th><th class="r">Task success</th></tr></thead><tbody>${
+    trendSeries.flatMap(s => s.points.map(p => `<tr><td>${esc(s.name)}</td><td class="mono">${esc(fullTime(p.x))}</td><td>${ago(p.x)}</td><td class="r num">${pct(p.y)}</td></tr>`)).join("")}</tbody></table>`);
+  const att = [];
+  const latestByName = {}; scored.forEach(r => { if (!latestByName[r.name]) latestByName[r.name] = r; });
+  Object.values(latestByName).filter(r => r.gates === "FAILED").slice(0, 4).forEach(r => att.push(`<div class="banner bad" style="margin-bottom:10px">${icon("x")}<div><a href="#/runs/${encodeURIComponent(r.run_id)}"><b>${esc(r.name)}</b></a> failed gates ${ago(r.t)}<ul>${(r.gate_failures || []).slice(0, 3).map(f => `<li>${esc(f)}</li>`).join("")}</ul></div></div>`));
+  (lastWin?.alerts || []).forEach(a => att.push(`<div class="banner warn" style="margin-bottom:10px">${icon("alert")}<div><b>${esc(lab(a.metric))}</b> regressed in production (${esc(a.scope)}): ${fmtMetric(a.metric, a.previous)} → ${fmtMetric(a.metric, a.current)}</div></div>`));
+  runs.filter(r => r.status === "incomplete").slice(0, 3).forEach(r => att.push(`<div class="banner warn" style="margin-bottom:10px">${icon("alert")}<div><a href="#/runs/${encodeURIComponent(r.run_id)}"><b>${esc(r.name)}</b></a> stopped early: ${esc(r.stop_reason || "")}</div></div>`));
+  $("#attention").innerHTML = att.join("") || `<div class="banner good">${icon("check")}<div><b>All clear.</b> No failing gates, incomplete runs or production alerts.</div></div>`;
+  $("#newrun")?.addEventListener("click", newRunModal);
+  bindRunRows(v);
+}
+function tile(label, value, delta, foot) {
+  return `<div class="card tile"><div class="tile-l">${esc(label)}</div><div class="tile-v">${esc(value)} ${delta}</div><div class="tile-f">${foot}</div></div>`;
+}
+function runsTable(runs, {select = false} = {}) {
+  if (!runs.length) return `<div class="empty">${icon("empty")}<b>No runs yet</b>Run <code>evalkit run CONFIG</code> or start one here.</div>`;
+  return `<table class="t"><thead><tr>${select ? "<th></th>" : ""}<th>Run</th><th>Started</th><th>Status</th><th>Gates</th><th style="width:170px">Task success</th>
+    <th class="r">Correctness</th><th class="r">Injection</th><th class="r">Errors</th><th class="r">Cases</th></tr></thead><tbody>${runs.map(r => {
+    const h = r.headline || {};
+    return `<tr class="click" data-run="${esc(r.run_id)}">${select ? `<td><input type="checkbox" class="pick" value="${esc(r.run_id)}" aria-label="Select ${esc(r.run_id)}"></td>` : ""}
+      <td><div style="font-weight:600">${esc(r.name)}</div><div class="mono muted small">${esc(r.run_id)}</div></td>
+      <td title="${esc(fullTime(r.t))}">${ago(r.t)}</td><td>${statusBadge(r.status)}</td><td>${r.headline ? gateBadge(r.gates) : '<span class="muted">–</span>'}</td>
+      <td>${meter(h.task_success)}</td><td class="r num">${pct(h.correctness)}</td><td class="r num">${pct(h.injection_resisted)}</td>
+      <td class="r num">${h.error ? `<span style="color:var(--crit-ink)">${pct(h.error)}</span>` : pct(h.error)}</td><td class="r num">${r.cases ?? "–"}</td></tr>`;
+  }).join("")}</tbody></table>`;
+}
+function bindRunRows(root) {
+  $$("tr[data-run]", root).forEach(tr => tr.addEventListener("click", e => { if (e.target.closest("input")) return; location.hash = "#/runs/" + encodeURIComponent(tr.dataset.run); }));
+}
+
+async function viewRuns() {
+  crumbs(["Runs"]); setNav("#/runs");
+  const runs = await loadRuns(true);
+  const names = [...new Set(runs.map(r => r.name))].sort();
+  const v = $("#view");
+  v.innerHTML = `<div class="page-h"><div><h1>Runs</h1><p>Every evaluation, newest first. Select two to compare.</p></div>
+    <div class="actions"><button class="btn" id="cmp" disabled>${icon("compare")}Compare selected</button>${can("run") ? `<button class="btn primary" id="newrun">${icon("play")}New run</button>` : ""}</div></div>
+    <div class="card"><div class="filters">
+      <div class="search">${icon("search")}<input class="input" id="q" placeholder="Search runs" aria-label="Search runs"></div>
+      <select class="input" id="fname" aria-label="Config"><option value="">All configs</option>${names.map(n => `<option>${esc(n)}</option>`).join("")}</select>
+      <div class="seg" id="fgate" role="group" aria-label="Gates"><button data-v="" class="on">All</button><button data-v="PASSED">Passed</button><button data-v="FAILED">Failed</button></div>
+      <span class="muted small" id="cnt" style="margin-left:auto"></span></div>
+      <div class="table-scroll" id="tbl"></div></div>`;
+  let gate = "";
+  const draw = () => {
+    const q = $("#q").value.toLowerCase(), n = $("#fname").value;
+    const rows = runs.filter(r => (!q || (r.run_id + r.name).toLowerCase().includes(q)) && (!n || r.name === n) && (!gate || r.gates === gate));
+    $("#tbl").innerHTML = runsTable(rows, {select: true}); $("#cnt").textContent = `${rows.length} of ${runs.length}`;
+    bindRunRows($("#tbl"));
+    $$(".pick").forEach(c => c.onchange = () => { const s = $$(".pick:checked"); $("#cmp").disabled = s.length !== 2; });
+  };
+  $("#q").oninput = draw; $("#fname").onchange = draw;
+  $$("#fgate button").forEach(b => b.onclick = () => { gate = b.dataset.v; $$("#fgate button").forEach(x => x.classList.toggle("on", x === b)); draw(); });
+  $("#cmp").onclick = () => { const s = $$(".pick:checked").map(c => c.value); const [a, b] = s.map(id => runs.find(r => r.run_id === id)).sort((x, y) => (x.t || 0) - (y.t || 0)); location.hash = `#/compare?a=${encodeURIComponent(a.run_id)}&b=${encodeURIComponent(b.run_id)}`; };
+  $("#newrun")?.addEventListener("click", newRunModal);
+  draw();
+}
+
+async function viewRun(id) {
+  setNav("#/runs");
+  const data = await api(`/api/v1/runs/${encodeURIComponent(id)}`);
+  const meta = data.meta, rep = data.report;
+  crumbs(["Runs", "#/runs"], [meta.name || id]);
+  const v = $("#view");
+  const head = `<div class="page-h"><div><h1>${esc(meta.name || id)}</h1><p><span class="mono">${esc(id)}</span> · ${esc(fullTime(runTime(meta)))}</p></div>
+    <div class="actions">${statusBadge(meta.status)} ${rep ? gateBadge(meta.gates) : ""}
+      ${rep ? `<a class="btn" href="#/compare?b=${encodeURIComponent(id)}">${icon("compare")}Compare</a>
+      <button class="btn" id="dl">${icon("download")}Report</button>` : ""}
+      ${(meta.status === "incomplete") && can("run") ? `<button class="btn primary" id="resume">${icon("play")}Resume</button>` : ""}</div></div>`;
+  if (!rep) {
+    const p = meta.progress || {}, frac = p.planned ? p.done / p.planned : 0;
+    v.innerHTML = head + `<div class="card"><div class="card-b"><div style="display:flex;align-items:center;gap:10px;margin-bottom:12px">
+      ${meta.status === "running" ? '<span class="pulse"></span><b>Running</b>' : "<b>Waiting for results</b>"}
+      <span class="muted">${p.done ?? 0}${p.planned ? " of " + p.planned : ""} cases finished${p.done && p.planned && p.done >= p.planned ? " · scoring with the judge" : ""}</span>
+      <span class="num" style="margin-left:auto;font-weight:600">${pct(frac)}</span></div>
+      <div class="progress"><i style="width:${(frac * 100).toFixed(1)}%"></i></div>
+      <p class="muted small" style="margin:12px 0 0">Every finished case is saved immediately. This page updates automatically.</p></div></div>`;
+    state.timers.push(setInterval(async () => {
+      try { const d = await api(`/api/v1/runs/${encodeURIComponent(id)}`); if (d.report || JSON.stringify(d.meta.progress) !== JSON.stringify(meta.progress) || d.meta.status !== meta.status) { clearTimers(); viewRun(id); } } catch { /* */ }
+    }, 2000));
+    return;
+  }
+  const o = rep.overall || {}, rates = Object.entries(o).filter(([m, x]) => RATE.has(m) && x.mean != null).map(([m, x]) => ({metric: m, ...x}));
+  const order = ["task_success", "correctness", "faithfulness", "relevance", "injection_resisted", "abstention", "source_recall", "tool_selection", "number_match", "status_agreement", "over_abstention", "access_violation", "error"];
+  rates.sort((a, b) => (order.indexOf(a.metric) + 99) % 99 - (order.indexOf(b.metric) + 99) % 99);
+  const fails = rep.gate_failures || [];
+  v.innerHTML = head + `
+    ${fails.length ? `<div class="banner bad" style="margin-bottom:16px">${icon("x")}<div><b>${fails.length} gate${fails.length > 1 ? "s" : ""} failed</b><ul>${fails.map(f => `<li>${esc(f)}</li>`).join("")}</ul></div></div>`
+      : `<div class="banner good" style="margin-bottom:16px">${icon("check")}<div><b>All gates passed.</b> ${rep.cases} cases scored.</div></div>`}
+    ${rep.task_success_excl_errors ? `<div class="banner info" style="margin-bottom:16px">${icon("info")}<div>Task success excluding ${rep.task_success_excl_errors.errored_runs} errored runs: <b>${pct(rep.task_success_excl_errors.mean)}</b></div></div>` : ""}
+    <div class="grid g-tiles" style="margin-bottom:16px">
+      ${tile("Task success", pct(o.task_success?.mean), "", o.task_success?.ci95 ? `<span>95% CI ${pct(o.task_success.ci95[0])}–${pct(o.task_success.ci95[1])}</span>` : "")}
+      ${tile("Avg latency", o.latency_s ? fix(o.latency_s.mean, 1) + " s" : "–", "", `<span>per case</span>`)}
+      ${tile("Avg tokens", o.total_tokens ? compact(o.total_tokens.mean) : "–", "", `<span>per case</span>`)}
+      ${tile("Cost", o.cost_usd ? "$" + fix(o.cost_usd.mean * (o.cost_usd.n || 1), 2) : "–", "", `<span>${o.cost_usd ? "total" : "set cost.* in config"}</span>`)}
+    </div>
+    <div class="card" id="quality" style="margin-bottom:16px"><div class="card-h"><h2>Quality and safety</h2><span class="sub">score with 95% confidence interval · ↓ lower is better</span>
+      <div class="right"><button class="btn sm js-toggle"></button></div></div><div class="card-b js-viz"></div></div>
+    <div class="card"><div class="tabs" role="tablist" id="tabs">
+      <button class="on" data-t="cases">Cases</button><button data-t="tags">By tag<span class="n">${Object.keys(rep.by_tag || {}).length}</span></button>
+      ${rep.access ? `<button data-t="access">Access control<span class="n">${rep.access.violations}</span></button>` : ""}
+      <button data-t="info">Run details</button></div><div id="tabbody"></div></div>`;
+  tableToggle($("#quality"), body => intervalChart(body, rates), () => `<table class="t"><thead><tr><th>Metric</th><th class="r">Score</th><th class="r">95% CI</th><th class="r">n</th></tr></thead><tbody>${
+    rates.map(r => `<tr><td>${esc(lab(r.metric))}</td><td class="r num">${pct(r.mean)}</td><td class="r num">${r.ci95 ? pct(r.ci95[0]) + "–" + pct(r.ci95[1]) : "–"}</td><td class="r num">${r.n}</td></tr>`).join("")}</tbody></table>`);
+  $("#dl")?.addEventListener("click", async () => {
+    const md = await api(`/api/v1/runs/${encodeURIComponent(id)}/artifacts/report.md`);
+    const a = document.createElement("a"); a.href = URL.createObjectURL(new Blob([md], {type: "text/markdown"})); a.download = id + "-report.md"; a.click();
+  });
+  $("#resume")?.addEventListener("click", async () => { try { await api(`/api/v1/runs/${encodeURIComponent(id)}/resume`, {method: "POST"}); toast("Run resumed"); setTimeout(() => viewRun(id), 800); } catch (e) { toast(e.message, true); } });
+  const tabs = {cases: () => tabCases(id), tags: () => tabTags(rep), access: () => tabAccess(id), info: () => tabInfo(meta, rep)};
+  $$("#tabs button").forEach(b => b.onclick = () => { $$("#tabs button").forEach(x => x.classList.toggle("on", x === b)); tabs[b.dataset.t](); });
+  tabCases(id);
+}
+
+async function tabCases(id) {
+  const body = $("#tabbody"); body.innerHTML = `<div class="empty">Loading cases…</div>`;
+  const {cases} = await api(`/api/v1/runs/${encodeURIComponent(id)}/cases`);
+  const tags = [...new Set(cases.flatMap(c => c.tags))].sort();
+  const outcome = c => c.error ? "error" : c.scores.task_success === 0 ? "fail" : c.scores.task_success === 1 ? "pass" : "na";
+  body.innerHTML = `<div class="filters">
+    <div class="seg" id="fo"><button class="on" data-v="">All <span class="muted">${cases.length}</span></button>
+      <button data-v="fail">Failed <span class="muted">${cases.filter(c => outcome(c) === "fail").length}</span></button>
+      <button data-v="error">Errors <span class="muted">${cases.filter(c => c.error).length}</span></button>
+      <button data-v="attack">Attacks <span class="muted">${cases.filter(c => c.attack).length}</span></button></div>
+    <select class="input" id="ft" aria-label="Tag"><option value="">All tags</option>${tags.map(t => `<option>${esc(t)}</option>`).join("")}</select>
+    <div class="search">${icon("search")}<input class="input" id="cq" placeholder="Search questions and answers"></div></div>
+    <div class="table-scroll" id="ctbl"></div>`;
+  let fo = "";
+  const draw = () => {
+    const t = $("#ft").value, q = $("#cq").value.toLowerCase();
+    const rows = cases.filter(c => (!fo || (fo === "attack" ? c.attack : outcome(c) === fo)) && (!t || c.tags.includes(t)) && (!q || (c.input + " " + c.answer + " " + c.case_id).toLowerCase().includes(q)));
+    $("#ctbl").innerHTML = rows.length ? `<table class="t"><thead><tr><th>Case</th><th>Question</th><th>Result</th><th class="r">Correct</th><th class="r">Faithful</th><th class="r">Latency</th><th class="r">Tokens</th></tr></thead><tbody>${rows.map((c, i) => {
+      const o = outcome(c), s = c.scores;
+      const res = o === "pass" ? '<span class="badge b-good">' + icon("check") + "Pass</span>" : o === "fail" ? '<span class="badge b-bad">' + icon("x") + "Fail</span>" : o === "error" ? '<span class="badge b-warn">' + icon("alert") + "Error</span>" : '<span class="badge b-mute">n/a</span>';
+      const yn = v => v == null ? '<span class="muted">–</span>' : v >= .5 ? '<span style="color:var(--good-ink)">Yes</span>' : '<span style="color:var(--crit-ink)">No</span>';
+      return `<tr class="click" data-i="${cases.indexOf(c)}"><td class="mono small">${esc(c.case_id)}${c.repeat ? " #" + c.repeat : ""}${c.attack ? `<div><span class="chip">attack: ${esc(c.attack)}</span></div>` : ""}</td>
+        <td class="wrap" title="${esc(c.input)}">${esc(c.input)}</td><td>${res}</td><td class="r">${yn(s.correctness)}</td><td class="r">${yn(s.faithfulness)}</td>
+        <td class="r num">${c.latency_s != null ? fix(c.latency_s, 1) + " s" : "–"}</td><td class="r num">${c.tokens ? compact(c.tokens) : "–"}</td></tr>`;
+    }).join("")}</tbody></table>` : `<div class="empty">No cases match these filters.</div>`;
+    $$("#ctbl tr[data-i]").forEach(tr => tr.onclick = () => caseDrawer(cases[+tr.dataset.i]));
+  };
+  $$("#fo button").forEach(b => b.onclick = () => { fo = b.dataset.v; $$("#fo button").forEach(x => x.classList.toggle("on", x === b)); draw(); });
+  $("#ft").onchange = draw; $("#cq").oninput = draw; draw();
+}
+function caseDrawer(c) {
+  const sc = Object.entries(c.scores).filter(([k, v]) => !k.startsWith("_") && v != null);
+  const ab = c.scores._abstention, acc = c.scores._access;
+  openDrawer(`<div class="drawer-h"><h3 class="mono">${esc(c.case_id)}</h3>${c.attack ? `<span class="badge b-warn">attack: ${esc(c.attack)}</span>` : ""}${c.identity ? `<span class="badge b-info">as ${esc(c.identity)}</span>` : ""}
+    <button class="btn ghost icon js-close" style="margin-left:auto" aria-label="Close">${icon("x")}</button></div>
+    <div class="drawer-b">
+      <div class="sec"><h4>Question</h4><div class="quote">${esc(c.input)}</div></div>
+      <div class="sec"><h4>Answer</h4>${c.error ? `<div class="banner bad" style="margin-bottom:8px">${icon("alert")}<div class="mono small">${esc(c.error)}</div></div>` : ""}<div class="quote">${esc(c.answer || "(empty)")}</div>
+        ${c.status ? `<p class="small muted" style="margin:6px 0 0">Agent's self-reported status: <b>${esc(c.status)}</b></p>` : ""}</div>
+      ${c.expected ? `<div class="sec"><h4>Expected</h4><div class="quote">${esc(c.expected)}</div></div>` : ""}
+      <div class="sec"><h4>Scores</h4><table class="t"><tbody>${sc.map(([k, v]) => `<tr><td>${esc(lab(k))}</td><td class="r num">${fmtMetric(k, v)}</td></tr>`).join("")}</tbody></table>
+        ${ab ? `<p class="small muted" style="margin:8px 0 0">Abstention decided by <b>${esc(ab.method)}</b>: ${esc(ab.label)}</p>` : ""}</div>
+      ${acc && acc.length ? `<div class="sec"><h4>Documents exposed (identity check)</h4><table class="t"><thead><tr><th>Document</th><th>Evidence</th><th>Allowed</th></tr></thead><tbody>${acc.map(f => `<tr><td class="mono small">${esc(f.doc)}</td><td>${esc(f.evidence)}</td><td>${f.allowed === false ? '<span class="badge b-bad">Denied</span>' : f.allowed ? '<span class="badge b-good">Yes</span>' : '<span class="badge b-mute">Unknown</span>'}</td></tr>`).join("")}</tbody></table></div>` : ""}
+      ${c.trace.length ? `<div class="sec"><h4>Tool calls (${c.trace.length})</h4>${c.trace.map((t, i) => `<div class="step"><div class="step-h"><span class="muted">${i + 1}</span><span class="mono">${esc(t.tool)}</span></div>
+        <div class="step-b"><b>args</b> ${esc(t.args)}\n<b>result</b> ${esc(t.result)}</div></div>`).join("")}</div>` : ""}
+      ${c.retrieved.length ? `<div class="sec"><h4>Retrieved documents</h4>${c.retrieved.map(d => `<span class="chip mono">${esc(d.source || d.id)}${d.score != null ? " · " + fix(d.score, 3) : ""}</span>`).join("")}</div>` : ""}
+      ${c.tags.length ? `<div class="sec"><h4>Tags</h4>${c.tags.map(t => `<span class="chip">${esc(t)}</span>`).join("")}</div>` : ""}
+    </div>`);
+}
+function tabTags(rep) {
+  const tags = Object.entries(rep.by_tag || {});
+  $("#tabbody").innerHTML = tags.length ? `<div class="table-scroll"><table class="t"><thead><tr><th>Tag</th><th style="width:220px">Task success</th><th class="r">Correctness</th><th class="r">Source recall</th><th class="r">Injection resisted</th><th class="r">n</th></tr></thead><tbody>${
+    tags.map(([t, m]) => `<tr><td><span class="chip">${esc(t)}</span></td><td>${meter(m.task_success?.mean)}</td><td class="r num">${pct(m.correctness?.mean)}</td><td class="r num">${pct(m.source_recall?.mean)}</td><td class="r num">${pct(m.injection_resisted?.mean)}</td><td class="r num">${m.task_success?.n ?? "–"}</td></tr>`).join("")}</tbody></table></div>`
+    : `<div class="empty">This run has no tags.</div>`;
+}
+async function tabAccess(id) {
+  const body = $("#tabbody");
+  let acc; try { acc = JSON.parse(await api(`/api/v1/runs/${encodeURIComponent(id)}/artifacts/access_report.json`)); } catch { body.innerHTML = `<div class="empty">No access report.</div>`; return; }
+  body.innerHTML = `<div class="card-b"><div class="grid g-tiles" style="margin-bottom:16px">${Object.entries(acc.per_identity).map(([u, s]) =>
+      `<div class="card tile"><div class="tile-l">Asked as ${esc(u)}</div><div class="tile-v">${s.violations ? `<span style="color:var(--crit-ink)">${s.violations}</span>` : "0"}</div><div class="tile-f"><span>runs with a violation, of ${s.runs}${s.unknown ? ` · ${s.unknown} unknown ACL` : ""}</span></div></div>`).join("")}</div>
+    ${acc.violations.length ? `<table class="t"><thead><tr><th>Question</th><th>Identity</th><th>Document</th><th>Evidence</th></tr></thead><tbody>${acc.violations.map(x => `<tr><td class="mono small">${esc(x.case)}</td><td>${esc(x.identity)}</td><td class="mono small">${esc(x.doc)}</td><td><span class="badge b-bad">${esc(x.evidence)}</span></td></tr>`).join("")}</tbody></table>`
+      : `<div class="banner good">${icon("check")}<div>No document was exposed to an identity that may not read it.</div></div>`}</div>`;
+}
+function tabInfo(meta, rep) {
+  const rows = [["Run id", meta.run_id], ["Config", meta.name], ["Status", meta.status || "complete"], ["Created", fullTime(runTime(meta))],
+    ["Dataset hash", meta.dataset_sha256], ["Config hash", meta.config_sha256], ["evalkit version", meta.evalkit_version], ["System version", meta.system_version],
+    ["Stop reason", meta.stop_reason], ["Tokens used", meta.usage ? compact(meta.usage.prompt_tokens + meta.usage.completion_tokens) : null], ["Flaky cases", (rep.flaky_cases || []).join(", ")]].filter(r => r[1]);
+  $("#tabbody").innerHTML = `<div class="card-b"><dl class="kv">${rows.map(([k, v]) => `<dt>${esc(k)}</dt><dd class="${/hash|id/i.test(k) ? "mono" : ""}">${esc(v)}</dd>`).join("")}</dl></div>`;
+}
+
+async function viewCompare(params) {
+  crumbs(["Compare"]); setNav("#/compare");
+  const runs = (await loadRuns(true)).filter(r => r.headline);
+  let a = params.get("a"), b = params.get("b");
+  if (b && !a) { const rb = runs.find(r => r.run_id === b); a = runs.find(r => r !== rb && r.name === rb?.name && (r.t || 0) < (rb?.t || 0))?.run_id || ""; }
+  const opts = sel => runs.map(r => `<option value="${esc(r.run_id)}" ${r.run_id === sel ? "selected" : ""}>${esc(r.name)} · ${esc(ago(r.t))} · ${esc(r.run_id)}</option>`).join("");
+  const v = $("#view");
+  v.innerHTML = `<div class="page-h"><div><h1>Compare runs</h1><p>A change is called better or worse only when a paired test over shared cases says it isn't noise.</p></div></div>
+    <div class="card" style="margin-bottom:16px"><div class="filters" style="border:0">
+      <label class="small muted">Baseline (A)</label><select class="input" id="ca" style="max-width:420px"><option value="">Choose…</option>${opts(a)}</select>
+      <label class="small muted">Candidate (B)</label><select class="input" id="cb" style="max-width:420px"><option value="">Choose…</option>${opts(b)}</select></div></div><div id="cres"></div>`;
+  const go = () => { const A = $("#ca").value, B = $("#cb").value; if (A && B) location.hash = `#/compare?a=${encodeURIComponent(A)}&b=${encodeURIComponent(B)}`; };
+  $("#ca").onchange = go; $("#cb").onchange = go;
+  if (!a || !b) { $("#cres").innerHTML = `<div class="card"><div class="empty">${icon("compare")}<b>Pick two runs</b>Usually the same config before and after a change.</div></div>`; return; }
+  const c = await api(`/api/v1/compare?a=${encodeURIComponent(a)}&b=${encodeURIComponent(b)}`);
+  const rows = c.metrics.filter(m => m.a != null || m.b != null);
+  const worse = rows.filter(m => m.verdict === "WORSE"), better = rows.filter(m => m.verdict === "better");
+  const verdict = m => m.verdict === "better" ? `<span class="badge b-good">${icon("check")}Better</span>` : m.verdict === "WORSE" ? `<span class="badge b-bad">${icon("x")}Worse</span>`
+    : m.verdict === "n.s." ? `<span class="badge b-mute" title="Not significant: could be noise">Not significant</span>`
+    : `<span class="muted small" title="The paired test only uses cases scored in both runs">${m.verdict === "same" ? "No change on shared cases" : "–"}</span>`;
+  const rate = rows.filter(m => RATE.has(m.metric) && m.a != null && m.b != null);
+  $("#cres").innerHTML = `${worse.length ? `<div class="banner bad" style="margin-bottom:16px">${icon("x")}<div><b>Significant regression${worse.length > 1 ? "s" : ""}:</b> ${worse.map(m => esc(lab(m.metric))).join(", ")}</div></div>`
+      : `<div class="banner ${better.length ? "good" : "info"}" style="margin-bottom:16px">${icon(better.length ? "check" : "info")}<div>${better.length ? `<b>Significant improvement:</b> ${better.map(m => esc(lab(m.metric))).join(", ")}. ` : ""}No significant regressions.</div></div>`}
+    <div class="card" id="dumb" style="margin-bottom:16px"><div class="card-h"><h2>Rates, baseline vs candidate</h2><div class="right"><button class="btn sm js-toggle"></button></div></div><div class="card-b js-viz"></div></div>
+    <div class="card"><div class="table-scroll"><table class="t"><thead><tr><th>Metric</th><th class="r">A</th><th class="r">B</th><th class="r">Change</th><th class="r">Cases better / worse</th><th class="r">p</th><th>Verdict</th></tr></thead><tbody>${
+      rows.map(m => `<tr><td>${esc(lab(m.metric))}${LOWER_BETTER.has(m.metric) ? ' <span class="muted">↓</span>' : ""}</td><td class="r num">${fmtMetric(m.metric, m.a)}</td><td class="r num">${fmtMetric(m.metric, m.b)}</td>
+        <td class="r num">${m.delta == null ? "–" : (m.delta > 0 ? "+" : "") + (RATE.has(m.metric) ? (m.delta * 100).toFixed(1) + " pts" : m.metric === "latency_s" ? fix(m.delta, 1) + " s" : fix(m.delta, 2))}</td>
+        <td class="r num">${m.n ? `${m.wins} / ${m.losses} <span class="muted">of ${m.n}</span>` : "–"}</td><td class="r num">${m.p == null ? "–" : m.p < .001 ? "<0.001" : fix(m.p, 3)}</td><td>${verdict(m)}</td></tr>`).join("")}</tbody></table></div></div>`;
+  tableToggle($("#dumb"), body => dumbbell(body, rate), () => `<table class="t"><thead><tr><th>Metric</th><th class="r">A</th><th class="r">B</th></tr></thead><tbody>${rate.map(m => `<tr><td>${esc(lab(m.metric))}</td><td class="r num">${pct(m.a)}</td><td class="r num">${pct(m.b)}</td></tr>`).join("")}</tbody></table>`);
+}
+function dumbbell(el, rows) {
+  if (!rows.length) { el.innerHTML = `<div class="empty">No shared rate metrics.</div>`; return; }
+  const W = Math.max(360, el.clientWidth || 640), rowH = 28, m = {l: 150, r: 24, t: 6, b: 26}, H = m.t + m.b + rows.length * rowH, X = v => m.l + v * (W - m.l - m.r);
+  let s = `<svg viewBox="0 0 ${W} ${H}" height="${H}" role="img" aria-label="Baseline versus candidate">`;
+  [0, .25, .5, .75, 1].forEach(t => s += `<line class="gridline" x1="${X(t)}" x2="${X(t)}" y1="${m.t}" y2="${H - m.b}"/><text class="tick" x="${X(t)}" y="${H - 8}" text-anchor="middle">${t * 100}%</text>`);
+  rows.forEach((r, i) => {
+    const cy = m.t + i * rowH + rowH / 2;
+    s += `<text class="tick" x="${m.l - 12}" y="${cy + 4}" text-anchor="end" style="fill:var(--ink-2);font-size:12px">${esc(lab(r.metric))}</text>`;
+    s += `<line x1="${X(r.a)}" x2="${X(r.b)}" y1="${cy}" y2="${cy}" stroke="var(--line-2)" stroke-width="2"/>`;
+    s += `<circle cx="${X(r.a)}" cy="${cy}" r="7" fill="var(--surface)" stroke="var(--s1)" stroke-width="2.5"><title>A: ${pct(r.a)}</title></circle>`;
+    s += `<circle cx="${X(r.b)}" cy="${cy}" r="3.5" fill="var(--s2)"><title>B: ${pct(r.b)}</title></circle>`;
+  });
+  el.innerHTML = `<div class="legend"><span><svg width="16" height="16" aria-hidden="true"><circle cx="8" cy="8" r="5.5" fill="none" stroke="var(--s1)" stroke-width="2.5"/></svg>A (baseline)</span><span><svg width="16" height="16" aria-hidden="true"><circle cx="8" cy="8" r="3.5" fill="var(--s2)"/></svg>B (candidate)</span></div><div class="chart">${s}</svg></div>`;
 }
 
 async function viewJobs() {
-  const j = await api("/api/v1/jobs");
-  $("#main").innerHTML = `<div class="panel"><table><tr><th>Job</th><th>Config</th><th>Run</th><th>Status</th><th>By</th><th>Submitted</th><th>Detail</th></tr>
-    ${j.jobs.map(x => `<tr><td>${esc(x.id)}</td><td>${esc(x.config || "")}</td><td>${esc(x.run_id || "")}</td>
-      <td class="${x.status === "failed" ? "bad" : x.status === "finished" ? "ok" : "warn"}">${esc(x.status)}</td>
-      <td>${esc(x.submitted_by)}</td><td>${esc(x.submitted_at)}</td><td class="muted">${esc(x.error || x.gates || "")}</td></tr>`).join("")
-      || `<tr><td colspan="7" class="muted">No jobs since the server started.</td></tr>`}</table></div>`;
+  crumbs(["Jobs"]); setNav("#/jobs");
+  const v = $("#view");
+  v.innerHTML = `<div class="page-h"><div><h1>Jobs</h1><p>Runs started from this server. Runs started from the CLI appear under Runs.</p></div>
+    <div class="actions">${can("run") ? `<button class="btn primary" id="newrun">${icon("play")}New run</button>` : ""}</div></div><div class="card" id="jt"></div>`;
+  $("#newrun")?.addEventListener("click", newRunModal);
+  const draw = async () => {
+    const {jobs} = await api("/api/v1/jobs");
+    $("#jt").innerHTML = jobs.length ? `<div class="table-scroll"><table class="t"><thead><tr><th>Job</th><th>Config</th><th>Status</th><th>Gates</th><th>Started by</th><th>Submitted</th><th>Run</th></tr></thead><tbody>${jobs.map(j => `<tr>
+      <td class="mono small">${esc(j.id)}</td><td>${esc(j.config || "resume")}</td><td>${statusBadge(j.status)}</td><td>${j.gates ? gateBadge(j.gates) : "–"}</td><td>${esc(j.submitted_by)}</td>
+      <td title="${esc(j.submitted_at)}">${ago(new Date(j.submitted_at))}</td><td>${j.run_id ? `<a href="#/runs/${encodeURIComponent(j.run_id)}">Open</a>` : "–"}${j.error ? `<div class="small" style="color:var(--crit-ink)">${esc(j.error)}</div>` : ""}</td></tr>`).join("")}</tbody></table></div>`
+      : `<div class="empty">${icon("jobs")}<b>No jobs since the server started</b>Start a run to see it here.</div>`;
+  };
+  await draw(); state.timers.push(setInterval(draw, 3000));
+}
+async function newRunModal() {
+  let configs = [];
+  try { configs = (await api("/api/v1/configs")).configs; } catch (e) { toast(e.message, true); return; }
+  const m = document.createElement("div"); m.className = "modal";
+  m.innerHTML = `<div class="card" role="dialog" aria-modal="true" aria-labelledby="nrh"><div class="card-h"><h2 id="nrh">New evaluation run</h2><button class="btn ghost icon right js-x" aria-label="Close">${icon("x")}</button></div>
+    <form class="card-b" id="nrf">${configs.length ? `<div class="field"><label for="nrc">Config</label><select class="input" id="nrc">${configs.map(c => `<option>${esc(c)}</option>`).join("")}</select>
+      <span class="hint">Only configs an administrator placed in the server's configs folder can be started.</span></div>
+      <div class="field"><label for="nrl">Limit (optional)</label><input class="input" id="nrl" type="number" min="1" placeholder="All cases"><span class="hint">Run only the first N cases, for a quick check.</span></div>
+      <div style="display:flex;gap:8px;justify-content:flex-end"><button type="button" class="btn js-x">Cancel</button><button class="btn primary">${icon("play")}Start run</button></div>`
+      : `<div class="empty">No configs are available to start.</div>`}</form></div>`;
+  document.body.appendChild(m);
+  $$(".js-x", m).forEach(b => b.onclick = () => m.remove());
+  m.onclick = e => { if (e.target === m) m.remove(); };
+  const f = $("#nrf", m);
+  if (configs.length) f.onsubmit = async e => {
+    e.preventDefault();
+    const body = {config: $("#nrc", m).value}; if ($("#nrl", m).value) body.limit = +$("#nrl", m).value;
+    try { const r = await api("/api/v1/runs", {method: "POST", body: JSON.stringify(body)}); m.remove(); toast("Run started"); location.hash = "#/runs/" + encodeURIComponent(r.run_id); }
+    catch (err) { toast(err.message, true); }
+  };
+}
+
+async function viewDatasets() {
+  crumbs(["Datasets"]); setNav("#/datasets");
+  const {datasets} = await api("/api/v1/datasets");
+  const v = $("#view");
+  v.innerHTML = `<div class="page-h"><div><h1>Datasets</h1><p>Test sets. Uploads are validated and stored by content hash, so every run is reproducible.</p></div>
+    <div class="actions">${can("datasets") ? `<button class="btn primary" id="up">${icon("upload")}Upload dataset</button>` : ""}</div></div>
+    <div class="card">${datasets.length ? `<div class="table-scroll"><table class="t"><thead><tr><th>Name</th><th>Version</th><th>File</th><th class="r">Cases</th></tr></thead><tbody>${datasets.map(d => `<tr>
+      <td style="font-weight:600">${esc(d.name)}</td><td class="mono small">${esc(d.version || "unversioned")}</td><td class="mono small muted">${esc(d.file)}</td><td class="r num">${d.cases}</td></tr>`).join("")}</tbody></table></div>`
+      : `<div class="empty">${icon("data")}<b>No datasets</b>Upload a JSONL file of test cases.</div>`}</div>`;
+  $("#up")?.addEventListener("click", () => {
+    const m = document.createElement("div"); m.className = "modal";
+    m.innerHTML = `<div class="card" role="dialog" aria-modal="true"><div class="card-h"><h2>Upload dataset</h2><button class="btn ghost icon right js-x" aria-label="Close">${icon("x")}</button></div>
+      <form class="card-b" id="uf"><div class="field"><label for="un">Name</label><input class="input" id="un" required pattern="[A-Za-z0-9][A-Za-z0-9._-]*" placeholder="hr-golden"></div>
+      <div class="field"><label for="ufile">JSONL file</label><input id="ufile" type="file" accept=".jsonl,.json" required><span class="hint">One test case per line: {"id": ..., "input": ..., "expected_output": ...}</span></div>
+      <div style="display:flex;gap:8px;justify-content:flex-end"><button type="button" class="btn js-x">Cancel</button><button class="btn primary">${icon("upload")}Upload</button></div></form></div>`;
+    document.body.appendChild(m); $$(".js-x", m).forEach(b => b.onclick = () => m.remove());
+    $("#uf", m).onsubmit = async e => {
+      e.preventDefault();
+      try { const text = await $("#ufile", m).files[0].text();
+        const r = await api(`/api/v1/datasets/${encodeURIComponent($("#un", m).value)}`, {method: "PUT", body: text});
+        m.remove(); toast(`Uploaded ${r.cases} cases as ${r.name}@${r.version}`); viewDatasets(); }
+      catch (err) { toast(err.message, true); }
+    };
+  });
 }
 
 async function viewMonitoring() {
-  const m = await api("/api/v1/monitoring");
-  const metrics = ["error", "gave_up", "faithfulness", "relevance", "latency_s"];
-  $("#main").innerHTML = `<div class="panel"><table><tr><th>Window end</th><th>Traces</th>
-    ${metrics.map(x => `<th>${x}</th>`).join("")}<th>Alerts</th></tr>
-    ${m.windows.slice().reverse().map(w => `<tr><td>${esc(w.window_end)}</td><td>${w.n}</td>
-      ${metrics.map(x => `<td>${fmt(w.overall?.[x]?.mean)}</td>`).join("")}
-      <td>${(w.alerts || []).length ? `<span class="pill bad">${w.alerts.length}</span> ` +
-        w.alerts.map(a => esc(`${a.metric} ${a.previous}→${a.current}`)).join("; ") : `<span class="muted">none</span>`}</td></tr>`).join("")
-      || `<tr><td colspan="${metrics.length + 3}" class="muted">No monitoring windows yet. Send traces to /v1/traces and run evalkit monitor.</td></tr>`}
-  </table></div>`;
+  crumbs(["Monitoring"]); setNav("#/monitoring");
+  const {windows} = await api("/api/v1/monitoring");
+  const v = $("#view");
+  if (!windows.length) {
+    v.innerHTML = `<div class="page-h"><div><h1>Monitoring</h1><p>Quality of live traffic, scored from OpenTelemetry traces.</p></div></div>
+      <div class="card"><div class="empty">${icon("monitor")}<b>No monitoring windows yet</b>Send traces to <code>/v1/traces</code>, then run <code>evalkit monitor CONFIG</code> (the Helm chart schedules it).</div></div>`;
+    return;
+  }
+  const last = windows[windows.length - 1], prev = windows[windows.length - 2];
+  const mval = (w, m) => w?.overall?.[m]?.mean;
+  const M = [["error", "Error rate"], ["gave_up", "Gave up"], ["faithfulness", "Faithfulness"], ["latency_s", "Latency"]].filter(([m]) => windows.some(w => mval(w, m) != null));
+  v.innerHTML = `<div class="page-h"><div><h1>Monitoring</h1><p>${windows.length} window${windows.length > 1 ? "s" : ""} · latest ending ${esc(fullTime(new Date(last.window_end)))}</p></div></div>
+    ${(last.alerts || []).length ? `<div class="banner bad" style="margin-bottom:16px">${icon("alert")}<div><b>${last.alerts.length} regression alert${last.alerts.length > 1 ? "s" : ""}</b><ul>${last.alerts.map(a => `<li>${esc(lab(a.metric))} (${esc(a.scope)}): ${fmtMetric(a.metric, a.previous)} → ${fmtMetric(a.metric, a.current)}, p=${fix(a.p_value, 4)}</li>`).join("")}</ul></div></div>`
+      : `<div class="banner good" style="margin-bottom:16px">${icon("check")}<div>No significant regressions in the latest window.</div></div>`}
+    <div class="grid g-tiles" style="margin-bottom:16px">${tile("Traces scored", String(last.n), "", `<span>last ${last.window_hours} h</span>`)}
+      ${M.map(([m, l]) => tile(l, fmtMetric(m, mval(last, m)), deltaHtml(mval(last, m), mval(prev, m), m), sparkline(windows.map(w => mval(w, m))))).join("")}</div>
+    <div class="grid g-2e">${M.map(([m, l]) => `<div class="card" data-m="${m}"><div class="card-h"><h2>${esc(l)}</h2><div class="right"><button class="btn sm js-toggle"></button></div></div><div class="card-b js-viz"></div></div>`).join("")}</div>
+    <div class="grid g-2e" style="margin-top:16px">
+      <div class="card"><div class="card-h"><h2>By agent version</h2><span class="sub">latest window</span></div><div class="table-scroll"><table class="t"><thead><tr><th>Version</th>${M.map(([, l]) => `<th class="r">${esc(l)}</th>`).join("")}<th class="r">n</th></tr></thead><tbody>${
+        Object.entries(last.by_version || {}).map(([ver, st]) => `<tr><td class="mono">${esc(ver)}</td>${M.map(([m]) => `<td class="r num">${fmtMetric(m, st[m]?.mean)}</td>`).join("")}<td class="r num">${Math.max(0, ...Object.values(st).map(x => x.n || 0))}</td></tr>`).join("")}</tbody></table></div></div>
+      <div class="card"><div class="card-h"><h2>Failure patterns</h2><span class="sub">latest window</span></div><div class="card-b">${
+        [...(last.failure_patterns?.errors || []).map(([e, n]) => `<div style="display:flex;gap:10px;margin-bottom:8px"><span class="badge b-bad">${n}×</span><code>${esc(e)}</code></div>`),
+         ...(last.failure_patterns?.failing_tools || []).map(([t, n]) => `<div style="display:flex;gap:10px;margin-bottom:8px"><span class="badge b-warn">${n}×</span>tool <code>${esc(t)}</code> failed</div>`)].join("") || '<span class="muted">No recurring failures.</span>'}</div></div></div>`;
+  $$("[data-m]", v).forEach(card => {
+    const m = card.dataset.m, pts = windows.filter(w => mval(w, m) != null).map(w => ({x: new Date(w.window_end), y: mval(w, m), meta: `n=${w.overall[m].n}`}));
+    tableToggle(card, body => lineChart(body, [{name: lab(m), points: pts}], {height: 180, yFmt: RATE.has(m) ? pct : (y => fix(y, 1) + " s"), rate: RATE.has(m)}),
+      () => `<table class="t"><thead><tr><th>Window end</th><th class="r">${esc(lab(m))}</th></tr></thead><tbody>${pts.map(p => `<tr><td>${esc(fullTime(p.x))}</td><td class="r num">${fmtMetric(m, p.y)}</td></tr>`).join("")}</tbody></table>`);
+  });
 }
 
 async function viewPlugins() {
-  const p = await api("/api/v1/plugins");
-  $("#main").innerHTML = `<div class="panel"><p class="muted">verified = exercised against the real library or service;
-    mock-tested = implemented against the vendor's documented API, tested with fakes only.</p>
-    <table><tr><th>Category</th><th>Name</th><th>Status</th><th>Extra</th><th>Description</th></tr>
-    ${p.plugins.map(x => `<tr><td>${esc(x.category)}</td><td><code>${esc(x.name)}</code></td>
-      <td class="${x.status === "verified" ? "ok" : "warn"}">${esc(x.status)}</td><td>${esc(x.extra || "–")}</td>
-      <td>${esc(x.description)}</td></tr>`).join("")}</table></div>`;
+  crumbs(["Plugins"]); setNav("#/plugins");
+  const {plugins} = await api("/api/v1/plugins");
+  const cats = [...new Set(plugins.map(p => p.category))];
+  const CAT = {system: "Agent systems", retriever: "Retrievers", model: "Model providers", storage: "Storage", secrets: "Secrets", auth: "Authentication", identity: "ACL sources"};
+  const v = $("#view");
+  const ver = plugins.filter(p => p.status === "verified").length;
+  v.innerHTML = `<div class="page-h"><div><h1>Plugins</h1><p>${plugins.length} integrations · ${ver} verified against the real service · ${plugins.length - ver} tested with fakes only</p></div></div>
+    <div class="banner info" style="margin-bottom:16px">${icon("info")}<div><b>Verified</b> plugins were exercised end to end against the real library or service. <b>Mock-tested</b> plugins are implemented against the vendor's documented API and covered by tests with fake clients; treat the first live run as an integration test.</div></div>
+    <div class="card"><div class="filters"><div class="seg" id="pc"><button data-v="" class="on">All</button>${cats.map(c => `<button data-v="${esc(c)}">${esc(CAT[c] || c)}</button>`).join("")}</div>
+      <div class="seg" id="ps"><button data-v="" class="on">Any status</button><button data-v="verified">Verified</button><button data-v="mock-tested">Mock-tested</button></div>
+      <div class="search">${icon("search")}<input class="input" id="pq" placeholder="Search integrations"></div></div><div class="table-scroll" id="ptbl"></div></div>`;
+  let c = "", s = "";
+  const draw = () => {
+    const q = $("#pq").value.toLowerCase();
+    const rows = plugins.filter(p => (!c || p.category === c) && (!s || p.status === s) && (!q || (p.name + p.description).toLowerCase().includes(q)));
+    $("#ptbl").innerHTML = `<table class="t"><thead><tr><th>Integration</th><th>Category</th><th>Status</th><th>Install</th></tr></thead><tbody>${rows.map(p => `<tr>
+      <td><div class="mono" style="font-weight:600">${esc(p.name)}</div><div class="small muted">${esc(p.description)}</div></td><td>${esc(CAT[p.category] || p.category)}</td>
+      <td>${p.status === "verified" ? `<span class="badge b-good">${icon("check")}Verified</span>` : `<span class="badge b-warn">Mock-tested</span>`}</td>
+      <td class="mono small">${p.extra ? `pip install "evalkit[${esc(p.extra)}]"` : '<span class="muted">included</span>'}</td></tr>`).join("")}</tbody></table>`;
+  };
+  $$("#pc button").forEach(b => b.onclick = () => { c = b.dataset.v; $$("#pc button").forEach(x => x.classList.toggle("on", x === b)); draw(); });
+  $$("#ps button").forEach(b => b.onclick = () => { s = b.dataset.v; $$("#ps button").forEach(x => x.classList.toggle("on", x === b)); draw(); });
+  $("#pq").oninput = draw; draw();
 }
 
 async function viewAudit() {
-  try {
-    const a = await api("/api/v1/audit");
-    $("#main").innerHTML = `<div class="panel"><p>Hash chain: <span class="${a.chain_ok ? "ok" : "bad"}">${esc(a.detail)}</span></p>
-      <table><tr><th>Time</th><th>Actor</th><th>Event</th><th>Details</th></tr>
-      ${a.events.slice().reverse().map(e => { const {ts, actor, event, prev, hash, ...rest} = e;
-        return `<tr><td>${esc(ts)}</td><td>${esc(actor)}</td><td>${esc(event)}</td><td class="muted">${esc(JSON.stringify(rest))}</td></tr>`; }).join("")}
-      </table></div>`;
-  } catch (e) { $("#main").innerHTML = `<div class="panel err">${esc(e.message)}</div>`; }
+  crumbs(["Audit log"]); setNav("#/audit");
+  const v = $("#view");
+  if (!can("audit")) { v.innerHTML = `<div class="card"><div class="empty">${icon("lock")}<b>Administrators only</b>The audit log needs the admin role.</div></div>`; return; }
+  const a = await api("/api/v1/audit");
+  const events = a.events.slice().reverse(), kinds = [...new Set(events.map(e => e.event))].sort();
+  v.innerHTML = `<div class="page-h"><div><h1>Audit log</h1><p>Every state-changing action, with who did it. Entries are hash-chained.</p></div></div>
+    <div class="banner ${a.chain_ok ? "good" : "bad"}" style="margin-bottom:16px">${icon(a.chain_ok ? "check" : "alert")}<div><b>${a.chain_ok ? "Integrity verified" : "Tampering detected"}</b> · ${esc(a.detail)}</div></div>
+    <div class="card"><div class="filters"><select class="input" id="ak"><option value="">All events</option>${kinds.map(k => `<option>${esc(k)}</option>`).join("")}</select>
+      <div class="search">${icon("search")}<input class="input" id="aq" placeholder="Search actor or details"></div></div><div class="table-scroll" id="atbl"></div></div>`;
+  const draw = () => {
+    const k = $("#ak").value, q = $("#aq").value.toLowerCase();
+    const rows = events.filter(e => (!k || e.event === k) && (!q || JSON.stringify(e).toLowerCase().includes(q)));
+    $("#atbl").innerHTML = rows.length ? `<table class="t"><thead><tr><th>Time</th><th>Actor</th><th>Event</th><th>Details</th></tr></thead><tbody>${rows.slice(0, 300).map(e => {
+      const {ts, actor, event, prev, hash, ...rest} = e;
+      return `<tr><td class="num small" title="${esc(ts)}">${esc(fullTime(new Date(ts)))}</td><td>${esc(actor)}</td><td><span class="chip mono">${esc(event)}</span></td>
+        <td class="small muted">${Object.entries(rest).map(([kk, vv]) => `<span class="mono">${esc(kk)}</span>=${esc(typeof vv === "object" ? JSON.stringify(vv) : vv)}`).join(" · ")}</td></tr>`;
+    }).join("")}</tbody></table>` : `<div class="empty">No events match.</div>`;
+  };
+  $("#ak").onchange = draw; $("#aq").oninput = draw; draw();
 }
 
-const views = {runs: viewRuns, jobs: viewJobs, monitoring: viewMonitoring, plugins: viewPlugins, audit: viewAudit};
-document.querySelectorAll("#nav button").forEach(b => b.onclick = () => {
-  document.querySelectorAll("#nav button").forEach(x => x.classList.toggle("on", x === b));
-  views[b.dataset.v]().catch(e => { if (e.message !== "authentication required") $("#main").innerHTML = `<div class="panel err">${esc(e.message)}</div>`; });
-});
+/* ============================================================ router */
+async function route() {
+  clearTimers(); closeDrawer();
+  if (!state.me) return;
+  const [path, qs] = (location.hash.slice(1) || "/").split("?");
+  const params = new URLSearchParams(qs || "");
+  const v = $("#view"); v.innerHTML = `<div class="empty">Loading…</div>`;
+  try {
+    if (path === "/" || path === "") await viewOverview();
+    else if (path === "/runs") await viewRuns();
+    else if (path.startsWith("/runs/")) await viewRun(decodeURIComponent(path.slice(6)));
+    else if (path === "/compare") await viewCompare(params);
+    else if (path === "/jobs") await viewJobs();
+    else if (path === "/datasets") await viewDatasets();
+    else if (path === "/monitoring") await viewMonitoring();
+    else if (path === "/plugins") await viewPlugins();
+    else if (path === "/audit") await viewAudit();
+    else v.innerHTML = `<div class="card"><div class="empty"><b>Page not found</b><a href="#/">Back to overview</a></div></div>`;
+  } catch (e) {
+    if (e.message !== "Sign-in required") v.innerHTML = `<div class="banner bad">${icon("alert")}<div><b>Something went wrong.</b> ${esc(e.message)}</div></div>`;
+  }
+}
+window.addEventListener("hashchange", route);
+let rz; window.addEventListener("resize", () => { clearTimeout(rz); rz = setTimeout(() => { if ($(".js-viz")) route(); }, 250); });
 
 (async () => {
-  const r = await fetch("/api/v1/me", {credentials: "same-origin"});
-  const body = await r.json();
-  if (!body.authenticated) { $("#who").innerHTML = body.mode === "oidc" ? `<a href="/auth/login">Sign in</a>` : ""; renderLogin(); return; }
-  me = body;
-  $("#who").innerHTML = `${esc(me.name)} · ${esc(me.roles.join(", "))}${me.mode === "oidc" ? ` · <a href="/auth/logout">Sign out</a>` : ""}`;
-  viewRuns().catch(e => $("#main").innerHTML = `<div class="panel err">${esc(e.message)}</div>`);
+  const saved = localStorage.getItem("evalkit_theme"); if (saved) document.documentElement.dataset.theme = saved;
+  const headers = state.apiKey ? {"x-api-key": state.apiKey} : {};
+  try {
+    const r = await fetch("/api/v1/me", {credentials: "same-origin", headers});
+    const me = await r.json();
+    if (!me.authenticated) return renderLogin();
+    state.me = me; shell(); route();
+  } catch { renderLogin(); }
 })();
 </script>
 </body>
