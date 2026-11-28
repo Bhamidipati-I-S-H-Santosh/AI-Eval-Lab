@@ -4,6 +4,7 @@
   python -m evalkit smoke CONFIG [--n 3]         run a few cases and print raw results
   python -m evalkit generate CONFIG [--n 30] [--unanswerable 5] [--out FILE]
   python -m evalkit rescore RUN_DIR              re-score saved results (no system calls)
+  python -m evalkit retry-errors RUN_DIR         re-run only the errored runs (e.g. 429s), then re-score
   python -m evalkit compare RUN_A RUN_B          side-by-side metric changes
   python -m evalkit export-attacks --token T --out DIR   attack docs for a staging DB
   python -m evalkit list                         adapters, metrics, attacks
@@ -17,6 +18,9 @@ from pathlib import Path
 
 
 def main(argv=None) -> int:
+    for stream in (sys.stdout, sys.stderr):  # Windows consoles default to cp1252 and crash on ❌ / –
+        if hasattr(stream, "reconfigure"):
+            stream.reconfigure(encoding="utf-8", errors="replace")
     p = argparse.ArgumentParser(prog="evalkit", description=__doc__,
                                 formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = p.add_subparsers(dest="cmd", required=True)
@@ -25,6 +29,7 @@ def main(argv=None) -> int:
     g = sub.add_parser("generate"); g.add_argument("config"); g.add_argument("--n", type=int, default=30)
     g.add_argument("--unanswerable", type=int, default=5); g.add_argument("--out"); g.add_argument("--seed", type=int, default=0)
     rs = sub.add_parser("rescore"); rs.add_argument("run_dir")
+    re_ = sub.add_parser("retry-errors"); re_.add_argument("run_dir")
     c = sub.add_parser("compare"); c.add_argument("run_a"); c.add_argument("run_b")
     e = sub.add_parser("export-attacks"); e.add_argument("--token", required=True)
     e.add_argument("--out", required=True); e.add_argument("--attacks", default="all")
@@ -67,6 +72,12 @@ def main(argv=None) -> int:
     if a.cmd == "rescore":
         report, run_dir = runner.rescore(a.run_dir)
         runner.print_summary(report)
+        return 1 if report["gate_failures"] else 0
+
+    if a.cmd == "retry-errors":
+        report, run_dir = runner.retry_errors(a.run_dir)
+        runner.print_summary(report)
+        print(f"\nReport: {run_dir / 'report.md'}")
         return 1 if report["gate_failures"] else 0
 
     if a.cmd == "compare":

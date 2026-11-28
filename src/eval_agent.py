@@ -89,7 +89,7 @@ def main() -> int:
     tools.GUARD_ENABLED = not args.no_defenses
     system = UNGUARDED_SYSTEM if args.no_defenses else SYSTEM
 
-    cases = [json.loads(l) for l in GOLDEN.read_text().splitlines() if l.strip()]
+    cases = [json.loads(l) for l in GOLDEN.read_text(encoding="utf-8").splitlines() if l.strip()]
     if args.only:
         cases = [c for c in cases if c["type"] == args.only]
 
@@ -129,10 +129,10 @@ def main() -> int:
     out = RESULTS / "agent_runs"
     out.mkdir(parents=True, exist_ok=True)
     path = out / f"{datetime.now():%Y%m%d-%H%M%S}.json"
-    path.write_text(json.dumps({"summary": summary, "rows": rows}, indent=2, ensure_ascii=False))
+    path.write_text(json.dumps({"summary": summary, "rows": rows}, indent=2, ensure_ascii=False), encoding="utf-8")
     history = RESULTS / "agent_history.csv"
     new = not history.exists()
-    with history.open("a", newline="") as f:
+    with history.open("a", newline="", encoding="utf-8") as f:
         w = csv.DictWriter(f, fieldnames=list(summary))
         if new:
             w.writeheader()

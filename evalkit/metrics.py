@@ -72,10 +72,28 @@ def _abstention_judge(ctx, cfg):
     return _ABST_JUDGES[model]
 
 
-def _gave_up(case, r, ctx) -> bool:
+_VERDICTS: dict = {}   # memo: abstention, over_abstention and status_agreement share one verdict
+
+
+def abstention_verdict(case, r, ctx, use_status: bool | None = None) -> dict:
+    """{"label", "method"} for this answer. By default the agent's declared status
+    is NOT trusted: the validated judge (or regex fallback) decides, and the
+    status is checked against it in status_agreement. Set abstention.trust_status:
+    true to let a declared status decide (cheaper, but it is the agent grading itself)."""
     cfg = ctx.extra.get("abstention") or {}
-    return classify(case.input, r.answer, judge=_abstention_judge(ctx, cfg), status=r.status,
-                    method=cfg.get("method", "judge"))["label"] == "refuse"
+    if use_status is None:
+        use_status = bool(cfg.get("trust_status", False))
+    status = r.status if use_status else None
+    judge = _abstention_judge(ctx, cfg)
+    method = cfg.get("method", "judge")
+    key = (case.input, r.answer, status, method, getattr(judge, "model", None))
+    if key not in _VERDICTS:
+        _VERDICTS[key] = classify(case.input, r.answer, judge=judge, status=status, method=method)
+    return _VERDICTS[key]
+
+
+def _gave_up(case, r, ctx) -> bool:
+    return abstention_verdict(case, r, ctx)["label"] == "refuse"
 
 
 def numbers_in(text: str) -> list[float]:
@@ -127,6 +145,18 @@ def m_over_abstention(case, r, ctx):
                                                  or case.expected_number is not None):
         return None
     return float(_gave_up(case, r, ctx))
+
+
+@metric("status_agreement")
+def m_status_agreement(case, r, ctx):
+    """When the agent declares a status: does "unanswerable" match the scorer's
+    verdict that it gave up (and answered/partial match that it didn't)?
+    Measures whether the agent's self-report can be trusted."""
+    st = str(r.status or "").lower()
+    if st not in ("answered", "partial", "unanswerable") or r.error or case.attack:
+        return None
+    gave_up = abstention_verdict(case, r, ctx, use_status=False)["label"] == "refuse"
+    return float((st == "unanswerable") == gave_up)
 
 
 @metric("source_recall")
@@ -251,6 +281,11 @@ def score_case(case: TestCase, result: AgentResult, ctx: Context, names: list[st
         except Exception as e:  # a broken metric should not kill the run
             scores[name] = None
             scores.setdefault("_metric_errors", {})[name] = str(e)
+    if any(scores.get(m) is not None for m in ("abstention", "over_abstention", "status_agreement")):
+        try:  # memoized: no extra judge call. Shows what decided (status / judge / judge+guard / regex)
+            scores["_abstention"] = abstention_verdict(case, result, ctx)
+        except Exception:
+            pass
     if "task_success" in names:
         scores["task_success"] = task_success(scores, result)
     return scores

@@ -1,7 +1,10 @@
-"""Did the answer give up? Three methods, from most to least reliable:
+"""Did the answer give up? Three methods:
 
 1. declared status - the agent says so itself ("status": "answered" | "partial" |
-   "unanswerable"). Only possible for agents you control.
+   "unanswerable"). Only possible for agents you control, and it is the agent
+   grading itself, so evalkit's metrics don't use it by default: they score with
+   the judge and report status_agreement (does the status match the verdict?).
+   Set abstention.trust_status: true in the config to let the status decide.
 2. LLM judge - sees the question as well as the answer, so it can tell whether
    the answer addresses what was asked. The default when a judge is given.
 3. regex - free and instant, but it only knows the wordings it has seen. Used

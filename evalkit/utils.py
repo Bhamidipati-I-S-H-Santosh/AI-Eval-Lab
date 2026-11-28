@@ -60,3 +60,26 @@ def fill_template(template: Any, values: dict) -> Any:
     if isinstance(template, list):
         return [fill_template(v, values) for v in template]
     return template
+
+
+def wilson(k: int, n: int, z: float = 1.96) -> tuple[float, float]:
+    """Wilson 95% interval for k successes out of n."""
+    import math
+    if n == 0:
+        return (0.0, 1.0)
+    p = k / n
+    d = 1 + z * z / n
+    c = (p + z * z / (2 * n)) / d
+    h = z * math.sqrt(p * (1 - p) / n + z * z / (4 * n * n)) / d
+    return (max(0.0, c - h), min(1.0, c + h))
+
+
+def sign_test_p(wins: int, losses: int) -> float:
+    """Two-sided exact sign test (McNemar for paired 0/1 outcomes); ties are dropped."""
+    import math
+    n = wins + losses
+    if n == 0:
+        return 1.0
+    k = min(wins, losses)
+    tail = sum(math.comb(n, i) for i in range(k + 1)) / 2 ** n
+    return min(1.0, 2 * tail)

@@ -53,7 +53,7 @@ Reply as JSON: {{"score": 1 or 0, "reason": "<short reason>"}}"""
 
 
 def load_golden() -> list[dict]:
-    return [json.loads(line) for line in GOLDEN.read_text().splitlines() if line.strip()]
+    return [json.loads(line) for line in GOLDEN.read_text(encoding="utf-8").splitlines() if line.strip()]
 
 
 def parse_judge(text: str) -> dict:
@@ -109,7 +109,7 @@ def run(args) -> dict:
         row["latency_s"] = round(time.time() - t0, 2)
         rows.append(row)
         if args.verbose:
-            print(json.dumps(row, ensure_ascii=False))
+            print(json.dumps(row, ensure_ascii=False), encoding="utf-8")
 
     def avg(key):
         vals = [r[key] for r in rows if key in r]
@@ -137,12 +137,12 @@ def save(result: dict) -> Path:
     runs.mkdir(parents=True, exist_ok=True)
     stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
     path = runs / f"{stamp}.json"
-    path.write_text(json.dumps(result, indent=2, ensure_ascii=False))
+    path.write_text(json.dumps(result, indent=2, ensure_ascii=False), encoding="utf-8")
 
     history = RESULTS / "history.csv"
     s = result["summary"]
     new = not history.exists()
-    with history.open("a", newline="") as f:
+    with history.open("a", newline="", encoding="utf-8") as f:
         w = csv.DictWriter(f, fieldnames=list(s))
         if new:
             w.writeheader()

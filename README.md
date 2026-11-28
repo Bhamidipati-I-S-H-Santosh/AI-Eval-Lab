@@ -208,8 +208,11 @@ refusals and raised 2 false alarms. It failed in three new ways:
   `Status: answered | partial | unanswerable`. The line is stripped from the
   answer and stored on the result (`AgentResult.status`; `status_field` for
   HTTP agents). When an agent declares a status, the scorer uses it instead of
-  reading the text. This only works for agents you control, and it hasn't
-  been checked on a live run yet.
+  reading the text. This only works for agents you control. *Update:* the
+  metrics no longer trust it by default, because it is the agent grading
+  itself. The judge decides, and a `status_agreement` metric reports how often
+  the declared status matches the judge's verdict (`abstention.trust_status: true`
+  restores the shortcut).
 - **An LLM judge that sees the question** (`evalkit/abstention.py`,
   `JUDGE_PROMPT`). It labels each reply refuse, answer or partial. It runs
   zero-shot on gpt-oss-20b, which wrote and labeled none of the scored sets,

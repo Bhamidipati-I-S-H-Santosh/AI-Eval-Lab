@@ -278,11 +278,23 @@ gates:
 
 - `report.md` lists **flaky cases**, which pass on some repeats and fail on others.
 - Scores are broken down **by tag**, so a weak area can't hide inside a good average.
+- Every rate metric has a **95% confidence interval**, computed over cases
+  (repeats averaged first). With 30 cases, a pass rate of 0.90 has an interval
+  of roughly 0.74–0.97, so small differences can be noise.
+- **Errors** (rate limits, timeouts) count as failures in `task_success`; the
+  report also gives task success excluding errored runs.
 - `python -m evalkit run …` exits with code 1 if any gate fails, which blocks a CI job.
 
 **Compare two runs** (e.g. before and after a prompt change):
 ```bash
 python -m evalkit compare results/evalkit/run-A results/evalkit/run-B
+```
+A change is labelled `better` / `WORSE` only when an exact paired sign test
+over the cases both runs share gives p < 0.05; otherwise it is `n.s.`.
+
+**Re-run only the failed runs** (429s, timeouts), keeping everything else:
+```bash
+python -m evalkit retry-errors results/evalkit/run-A
 ```
 **Re-score without re-running** (new metric, new judge):
 ```bash

@@ -28,6 +28,7 @@ import math
 import os
 from pathlib import Path
 
+from .utils import wilson  # noqa: F401  (re-exported)
 from .abstention import JUDGE_PROMPT, JUDGE_PROMPT_V1, abstained, classify
 
 LABELS = Path(__file__).resolve().parent.parent / "tests" / "fixtures" / "abstention_labels.jsonl"
@@ -52,16 +53,6 @@ def style(r: dict) -> str:
     if "prompt)" in src:
         return src.rsplit(",", 1)[-1].replace("prompt)", "").strip()
     return "agent eval run" if "eval run" in src else "hand-written"
-
-
-def wilson(k: int, n: int, z: float = 1.96) -> tuple[float, float]:
-    if n == 0:
-        return (0.0, 1.0)
-    p = k / n
-    d = 1 + z * z / n
-    c = (p + z * z / (2 * n)) / d
-    h = z * math.sqrt(p * (1 - p) / n + z * z / (4 * n * n)) / d
-    return (max(0.0, c - h), min(1.0, c + h))
 
 
 def score(rows: list[dict], fn=None) -> dict:

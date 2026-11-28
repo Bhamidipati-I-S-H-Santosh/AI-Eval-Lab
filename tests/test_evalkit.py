@@ -378,9 +378,66 @@ def test_default_is_judge_first_and_falls_back_to_regex():
     assert classify("q", "I don't know.")["method"] == "regex"
 
 
-def test_abstention_metric_reads_declared_status():
+def test_abstention_metric_ignores_declared_status_unless_trusted():
     c = TestCase(id="x", input="q", unanswerable=True)
-    assert M.m_abstention(c, AgentResult(answer="A long answer [a.md] 5", status="unanswerable"), ctx()) == 1.0
+    r = AgentResult(answer="A long answer [a.md] 5", status="unanswerable")
+    assert M.m_abstention(c, r, ctx()) == 0.0               # the text decides, not the self-report
+    trusted = M.Context(extra={"abstention": {"trust_status": True}})
+    assert M.m_abstention(c, r, trusted) == 1.0
+
+
+def test_status_agreement_checks_the_self_report():
+    c = TestCase(id="x", input="q", unanswerable=True)
+    honest = AgentResult(answer="I don't know.", status="unanswerable")
+    liar = AgentResult(answer="A long answer [a.md] 5", status="unanswerable")
+    assert M.m_status_agreement(c, honest, ctx()) == 1.0
+    assert M.m_status_agreement(c, liar, ctx()) == 0.0
+    assert M.m_status_agreement(c, AgentResult(answer="I don't know."), ctx()) is None   # no status
+    scores = M.score_case(c, honest, ctx(), ["abstention", "status_agreement"])
+    assert scores["_abstention"]["method"] in ("regex", "regex-v4")   # records what decided
+
+
+def test_confidence_intervals_and_errors_excluded():
+    cases = [TestCase(id=f"c{i}", input="q", tags=["t"]) for i in range(10)]
+    scored = [{"case_id": f"c{i}", "repeat": 0,
+               "result": {"error": "429" if i == 9 else None},
+               "scores": {"task_success": 0.0 if i >= 8 else 1.0, "latency_s": 1.5}} for i in range(10)]
+    s = runner.aggregate(scored, cases)
+    lo, hi = s["overall"]["task_success"]["ci95"]
+    assert 0.4 < lo < 0.5 and 0.9 < hi < 1.0                # 8/10 -> roughly 0.49-0.94
+    assert "ci95" not in s["overall"]["latency_s"]           # not a rate
+    ex = s["task_success_excl_errors"]
+    assert ex["errored_runs"] == 1 and abs(ex["mean"] - 8 / 9) < 1e-3
+
+
+def test_sign_test():
+    from evalkit.utils import sign_test_p
+    assert sign_test_p(0, 0) == 1.0
+    assert sign_test_p(2, 0) == 0.5                          # 2 cases can never be significant
+    assert sign_test_p(10, 0) < 0.01
+
+
+def test_retry_errors_reruns_only_failed_runs(tmp_path):
+    FLAKY["fail"] = True
+    cfg = _config(tmp_path, "tests.test_evalkit:flaky_agent")
+    report, run_dir = runner.run(cfg, log=lambda *a: None)
+    assert report["overall"]["error"]["mean"] == 1.0
+    FLAKY["fail"], FLAKY["calls"] = False, 0
+    again, _ = runner.retry_errors(str(run_dir), log=lambda *a: None)
+    assert again["overall"]["error"]["mean"] == 0.0
+    assert FLAKY["calls"] == 4                               # 2 cases x 2 repeats, attacks skipped (no hook)
+    rows = [json.loads(l) for l in (run_dir / "results.jsonl").read_text(encoding="utf-8").splitlines()]
+    assert len(rows) == 4 and all(r["result"]["answer"] == "I don't know." for r in rows)
+
+
+FLAKY = {"fail": False, "calls": 0}
+
+
+def flaky_agent(question):
+    FLAKY["calls"] += 1
+    if FLAKY["fail"]:
+        raise RuntimeError("429 Too Many Requests")
+    return careful_agent(question)
 
 
 def test_agent_status_line_is_parsed_and_removed():
@@ -391,6 +448,6 @@ def test_agent_status_line_is_parsed_and_removed():
 
 
 def test_wilson_interval_is_wide_for_small_counts():
-    from evalkit.scorer_check import wilson
+    from evalkit.utils import wilson
     lo, hi = wilson(6, 12)
     assert 0.2 < lo < 0.3 and 0.7 < hi < 0.8

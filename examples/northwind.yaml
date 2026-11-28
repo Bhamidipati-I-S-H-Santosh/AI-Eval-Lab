@@ -24,6 +24,7 @@ judge:                # remove this block to run without an LLM judge
 abstention:           # how "did it give up?" is decided (see evalkit/abstention.py)
   method: judge       # judge (default) | hybrid | regex
   judge_model: openai/gpt-oss-safeguard-20b   # the model validated in evalkit.scorer_check
+  trust_status: false # true = the agent's own 'Status:' line decides (no judge call); false = judge decides, status_agreement checks the status
 
 attacks:
   mode: wrapper       # wrapper | mcp | external

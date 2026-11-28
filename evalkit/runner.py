@@ -164,10 +164,22 @@ def aggregate(scored: list[dict], cases: list[TestCase]) -> dict:
             per_rep = [p for p in per_rep if p is not None]
             out[m] = {"mean": mean, "n": sum(v is not None for v in vals),
                       "std_across_repeats": round(statistics.pstdev(per_rep), 4) if len(per_rep) > 1 else 0.0}
+            ci = confidence_interval(rows, m)
+            if ci:
+                out[m]["ci95"] = ci
         return out
 
     tags = sorted({t for c in cases for t in c.tags})
     by_tag = {t: summarize([r for r in scored if t in by_id[r["case_id"]].tags]) for t in tags}
+
+    # Errors (rate limits, timeouts) count as failures in task_success. This
+    # second number shows quality on the runs that actually got an answer.
+    ok = [r for r in scored if not (r.get("result") or {}).get("error")]
+    ts_ok = _mean([r["scores"].get("task_success") for r in ok])
+    excl = None
+    if ts_ok is not None and len(ok) < len(scored):
+        excl = {"mean": ts_ok, "n": sum(r["scores"].get("task_success") is not None for r in ok),
+                "errored_runs": len(scored) - len(ok)}
 
     # Flaky = same case passes on some repeats and fails on others.
     flaky = []
@@ -175,7 +187,44 @@ def aggregate(scored: list[dict], cases: list[TestCase]) -> dict:
         vals = {r["scores"].get("task_success") for r in scored if r["case_id"] == cid} - {None}
         if len(vals) > 1:
             flaky.append(cid)
-    return {"overall": summarize(scored), "by_tag": by_tag, "flaky_cases": sorted(flaky)}
+    out = {"overall": summarize(scored), "by_tag": by_tag, "flaky_cases": sorted(flaky)}
+    if excl:
+        out["task_success_excl_errors"] = excl
+    return out
+
+
+# Metrics that are not 0..1 rates get no interval.
+_NOT_RATES = {"latency_s", "cost_usd", "total_tokens", "steps"}
+
+
+def _case_means(rows, m) -> dict:
+    """Average each case over its repeats, so repeats don't pose as extra evidence."""
+    per: dict = {}
+    for r in rows:
+        v = r["scores"].get(m)
+        if v is not None:
+            per.setdefault(r["case_id"], []).append(v)
+    return {cid: sum(v) / len(v) for cid, v in per.items()}
+
+
+def confidence_interval(rows, m) -> list[float] | None:
+    """95% interval over cases: Wilson for pass/fail metrics, normal
+    approximation (clipped to 0..1) when repeats make case scores fractional."""
+    if m in _NOT_RATES:
+        return None
+    vals = list(_case_means(rows, m).values())
+    n = len(vals)
+    if n == 0 or any(v < 0 or v > 1 for v in vals):
+        return None
+    from .utils import wilson
+    if all(v in (0.0, 1.0) for v in vals):
+        lo, hi = wilson(int(sum(vals)), n)
+    else:
+        mean = sum(vals) / n
+        sd = statistics.stdev(vals) if n > 1 else 0.0
+        half = 1.96 * sd / n ** 0.5
+        lo, hi = max(0.0, mean - half), min(1.0, mean + half)
+    return [round(lo, 3), round(hi, 3)]
 
 
 def check_gates(overall: dict, gates: dict) -> list[str]:
@@ -204,10 +253,17 @@ def write_report(run_dir: Path, cfg: dict, summary: dict, scored: list[dict], ca
              f"- Gates: {'PASSED' if not failures else 'FAILED'}", ""]
     for f in failures:
         lines.append(f"  - ❌ {f}")
-    lines += ["", "## Overall", "", "| Metric | Mean | n | Std across repeats |", "|---|---|---|---|"]
+    lines += ["", "## Overall", "", "| Metric | Mean | 95% CI | n | Std across repeats |", "|---|---|---|---|---|"]
     for m, v in summary["overall"].items():
         arrow = "↑" if M.higher_is_better(m) else "↓"
-        lines.append(f"| {m} {arrow} | {v['mean']} | {v['n']} | {v['std_across_repeats']} |")
+        ci = f"{v['ci95'][0]}–{v['ci95'][1]}" if v.get("ci95") else "–"
+        lines.append(f"| {m} {arrow} | {v['mean']} | {ci} | {v['n']} | {v['std_across_repeats']} |")
+    ex = summary.get("task_success_excl_errors")
+    if ex:
+        lines += ["", f"Task success excluding {ex['errored_runs']} errored runs: **{ex['mean']}** "
+                      f"(n={ex['n']}). Re-run them with `python -m evalkit retry-errors {run_dir}`."]
+    lines += ["", "95% CIs are computed over cases (repeats averaged first). With few cases they "
+                  "are wide: a difference inside them may be noise."]
     key = [m for m in ("task_success", "correctness", "source_recall", "injection_resisted")
            if m in summary["overall"]]
     if summary["by_tag"] and key:
@@ -237,7 +293,12 @@ def print_summary(report: dict):
     print("\n=== Eval summary ===")
     for m, v in report["overall"].items():
         extra = f"  (±{v['std_across_repeats']})" if v["std_across_repeats"] else ""
-        print(f"{m:>22}: {v['mean']}{extra}   n={v['n']}")
+        ci = f"  [{v['ci95'][0]}-{v['ci95'][1]}]" if v.get("ci95") else ""
+        print(f"{m:>22}: {v['mean']}{ci}{extra}   n={v['n']}")
+    ex = report.get("task_success_excl_errors")
+    if ex:
+        print(f"{'excl. errors':>22}: task_success {ex['mean']} ({ex['errored_runs']} errored runs; "
+              f"retry with: python -m evalkit retry-errors RUN_DIR)")
     if report["flaky_cases"]:
         print(f"{'flaky cases':>22}: {len(report['flaky_cases'])}")
     print("\nGates:", "PASSED" if not report["gate_failures"] else "FAILED")
@@ -305,21 +366,100 @@ def rescore(run_dir: str):
         import_object(m) if ":" in m else __import__(m)
     judge = Judge(**expand_env(cfg["judge"])) if cfg.get("judge") else None
     cases = load_cases(run_dir / "cases.jsonl")
-    rows = [json.loads(l) for l in (run_dir / "results.jsonl").read_text().splitlines() if l.strip()]
+    rows = [json.loads(l) for l in (run_dir / "results.jsonl").read_text(encoding="utf-8").splitlines() if l.strip()]
     return score_and_report(cfg, run_dir, cases, rows, judge)
 
 
-def compare(a: str, b: str) -> str:
-    ra = json.loads((Path(a) / "report.json").read_text())
-    rb = json.loads((Path(b) / "report.json").read_text())
-    lines = [f"{'metric':>22} | {'A':>9} | {'B':>9} | change", "-" * 58]
+def retry_errors(run_dir: str, log=print):
+    """Re-run only the runs that errored (rate limits, timeouts) in a saved run,
+    keep every other result, then re-score. Attack runs are re-poisoned with
+    their original payload in wrapper mode."""
+    run_dir = Path(run_dir)
+    cfg = load_config(run_dir / "config.yaml")
+    cases = load_cases(run_dir / "cases.jsonl")
+    by_id = {c.id: c for c in cases}
+    rows = [json.loads(l) for l in (run_dir / "results.jsonl").read_text(encoding="utf-8").splitlines()
+            if l.strip()]
+    todo = [i for i, r in enumerate(rows) if (r.get("result") or {}).get("error")]
+    system, retriever, judge = build_from_config(cfg)
+    if not todo:
+        log("No errored runs; re-scoring only.")
+    else:
+        log(f"Re-running {len(todo)} errored runs of {len(rows)}")
+    attack_cfg = cfg.get("attacks") or {}
+    wrapper = attack_cfg.get("mode", "wrapper") == "wrapper"
+    still = 0
+    try:
+        for n, i in enumerate(todo, 1):
+            case = by_id[rows[i]["case_id"]]
+            poison = wrapper and case.attack and case.attack.get("payload") and retriever is not None \
+                and system.supports_retriever_injection
+            if poison:
+                system.set_retriever(PoisonedRetriever(retriever, case.attack["payload"],
+                                                       position=attack_cfg.get("position", 0)))
+            try:
+                res = _safe_run(system, case)
+            finally:
+                if poison:
+                    system.set_retriever(None)
+            rows[i]["result"] = res.to_dict()
+            still += bool(res.error)
+            log(f"  {n}/{len(todo)} {case.id}: {'still failing: ' + res.error[:80] if res.error else 'ok'}")
+    finally:
+        system.close()
+        if retriever is not None:
+            retriever.close()
+    with (run_dir / "results.jsonl").open("w", encoding="utf-8") as f:
+        for r in rows:
+            f.write(json.dumps(r, ensure_ascii=False) + "\n")
+    if todo:
+        log(f"{len(todo) - still} fixed, {still} still failing")
+    return score_and_report(cfg, run_dir, cases, rows, judge)
+
+
+def _load_scores(run_dir: Path) -> list[dict]:
+    p = run_dir / "scores.jsonl"
+    if not p.exists():
+        return []
+    return [json.loads(l) for l in p.read_text(encoding="utf-8").splitlines() if l.strip()]
+
+
+def compare(a: str, b: str, alpha: float = 0.05) -> str:
+    """Side-by-side metrics. A change is called better/WORSE only if an exact
+    paired sign test over the cases both runs share gives p < alpha; otherwise
+    it is marked 'n.s.' (could be noise)."""
+    from .utils import sign_test_p
+    ra = json.loads((Path(a) / "report.json").read_text(encoding="utf-8"))
+    rb = json.loads((Path(b) / "report.json").read_text(encoding="utf-8"))
+    sa, sb = _load_scores(Path(a)), _load_scores(Path(b))
+    lines = [f"{'metric':>22} | {'A':>9} | {'B':>9} | {'change':>8} | paired test (cases B better/worse)",
+             "-" * 92]
     for m in sorted(set(ra["overall"]) | set(rb["overall"])):
         va, vb = ra["overall"].get(m, {}).get("mean"), rb["overall"].get(m, {}).get("mean")
         if va is None or vb is None:
             lines.append(f"{m:>22} | {str(va):>9} | {str(vb):>9} |")
             continue
         d = vb - va
-        better = (d > 0) == M.higher_is_better(m) if m in M.REGISTRY or m == "task_success" else None
-        mark = "" if abs(d) < 1e-9 else ("better" if better else "WORSE")
-        lines.append(f"{m:>22} | {va:>9} | {vb:>9} | {d:+.4f} {mark}")
+        known = m in M.REGISTRY or m == "task_success"
+        hib = M.higher_is_better(m) if known else True
+        ca, cb = _case_means(sa, m), _case_means(sb, m)
+        common = set(ca) & set(cb)
+        if not common:
+            test = "no per-case scores to pair"
+            mark = "" if abs(d) < 1e-9 else "?"
+        else:
+            diffs = [(cb[c] - ca[c]) * (1 if hib else -1) for c in common]
+            wins, losses = sum(x > 1e-9 for x in diffs), sum(x < -1e-9 for x in diffs)
+            p = sign_test_p(wins, losses)
+            test = f"{wins}/{losses} of {len(common)}, p={p:.3f}"
+            if wins == losses == 0:
+                mark = ""
+            elif p < alpha and known:
+                mark = "better" if wins > losses else "WORSE"
+            else:
+                mark = "n.s."
+        lines.append(f"{m:>22} | {va:>9} | {vb:>9} | {d:+8.4f} | {test} {mark}")
+    lines.append(f"\nbetter/WORSE = paired sign test p < {alpha}; n.s. = the change could be noise.\n"
+                 "The test uses only cases scored in both runs; the means use every scored case "
+                 "in each run, so they can disagree when runs errored on different cases.")
     return "\n".join(lines)
